@@ -408,7 +408,8 @@
     const rng = mulberry32(S.seed * 97 + 3);
     const sigma = 10 + (rng() - 0.5) * 2, rho = 28 + (rng() - 0.5) * 4, beta = 8 / 3;
     const f = (x, y, z) => [sigma * (y - x), x * (rho - z) - y, x * y - beta * z];
-    const N = 30000 + P.cx * 20000, dt = 0.005, skip = 1000;
+    // Few enough loops that individual orbits stay distinct instead of filling the wings.
+    const N = 2500 + P.cx * 3500, dt = 0.005, skip = 1000;
     const pts = new Float32Array(N * 3);
     let x = 0.1 + rng() * 0.1, y = 0, z = 0;
     let mz = 0, R = 0;
@@ -471,10 +472,13 @@
       const iy = Math.round(((-z * cp + y * sp - L.fy) * fit - v0) / du);
       if (ix >= 0 && iy >= 0 && ix < cols && iy < rows) hist[iy * cols + ix] += 0.75 - 0.35 * (depth / L.R);
     }
-    // Log scale so the sparse outer loops still show next to the dense centres of the wings.
-    let max = 0;
-    for (let i = 0; i < hist.length; i++) { hist[i] = Math.log1p(hist[i]); if (hist[i] > max) max = hist[i]; }
-    if (max > 0) for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(hist[i] / max, 0.8);
+    // Brightness relative to a typical busy line cell (90th percentile of lit cells): a single
+    // orbit reads as a clear track, crossings saturate, and empty gaps stay dark.
+    const lit = [];
+    for (let i = 0; i < hist.length; i++) if (hist[i] > 0) lit.push(hist[i]);
+    lit.sort((a, b) => a - b);
+    const ref = lit.length ? lit[Math.floor(lit.length * 0.9)] : 1;
+    for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(Math.min(1, hist[i] / ref), 0.6);
     P.att = { val: hist, cols, rows, u0, v0, du };
     P.attKey = key;
   }
