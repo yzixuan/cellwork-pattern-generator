@@ -5,7 +5,7 @@
 <title>Cellwork</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Pixelify+Sans:wght@400;600&display=swap">
 <style>
   :root {
     color-scheme: dark;
@@ -174,7 +174,7 @@
     shape: "dot", spacing: 16, dotSize: 90, mapping: "both", shades: 5, threshold: 8, texture: 10,
     mode: "ambient", loop: 6,
     tone: "dark", color: "#B18CFF", opacity: 95, grain: 16,
-    textOn: false, caption: "Category", headline: "Your headline here", subtitle: "A short line of supporting text", showCaption: true, showHeadline: true, showSubtitle: false, textPos: "bl", textSize: 72,
+    textOn: false, caption: "Category", headline: "Your headline here", subtitle: "A short line of supporting text", showCaption: true, showHeadline: true, showSubtitle: false, textFont: "sans", textPos: "bl", textSize: 72,
     format: "16:9", fileType: "png", pngScale: 1, filename: "",
   };
 
@@ -660,13 +660,27 @@
 
   /* ---------- text block ---------- */
   const measure = document.createElement("canvas").getContext("2d");
+  // Headline and subtitle fonts. The label always stays in Geist Mono.
+  const TEXT_FONTS = {
+    sans: { family: "Geist", css: "Geist, ui-sans-serif, system-ui, sans-serif", head: 600, track: -0.02 },
+    mono: { family: "Geist Mono", css: '"Geist Mono", ui-monospace, monospace', head: 500, track: -0.01 },
+    pixel: { family: "Pixelify Sans", css: '"Pixelify Sans", "Geist Mono", ui-monospace, monospace', head: 600, track: 0 },
+  };
+  // Canvas text doesn't trigger web-font loading, so load the chosen face before drawing with it.
+  function loadTextFont() {
+    const F = TEXT_FONTS[S.textFont] || TEXT_FONTS.sans;
+    return Promise.all([`${F.head} 40px "${F.family}"`, `400 40px "${F.family}"`].map((f) => document.fonts.load(f)))
+      .then(() => { dirty = true; }, () => {});
+  }
+
   function textItems(W, H, s) {
     if (!S.textOn) return [];
     const pad = Math.round(Math.min(W, H) * 0.07);
     const hs = S.textSize * s, cs = Math.max(9 * s, hs * 0.26), ss = Math.max(10 * s, hs * 0.36);
-    const headFont = `600 ${hs}px Geist, ui-sans-serif, system-ui, sans-serif`;
+    const F = TEXT_FONTS[S.textFont] || TEXT_FONTS.sans;
+    const headFont = `${F.head} ${hs}px ${F.css}`;
     const capFont = `500 ${cs}px "Geist Mono", ui-monospace, monospace`;
-    const subFont = `400 ${ss}px Geist, ui-sans-serif, system-ui, sans-serif`;
+    const subFont = `400 ${ss}px ${F.css}`;
     const maxW = W * (S.textPos === "center" ? 0.8 : 0.62);
     const wrap = (text, font) => {
       measure.font = font;
@@ -690,9 +704,9 @@
     const x = align === "center" ? W / 2 : pad;
     const items = [];
     if (cap) items.push({ text: cap, x, y: top + cs, font: capFont, family: "Geist Mono", size: cs, weight: 500, spacing: cs * 0.14, align, alpha: 0.7 });
-    lines.forEach((t, i) => items.push({ text: t, x, y: top + gap + lh * (i + 1) - hs * 0.2, font: headFont, family: "Geist", size: hs, weight: 600, spacing: -hs * 0.02, align, alpha: 1 }));
+    lines.forEach((t, i) => items.push({ text: t, x, y: top + gap + lh * (i + 1) - hs * 0.2, font: headFont, family: F.family, size: hs, weight: F.head, spacing: hs * F.track, align, alpha: 1 }));
     const subTop = top + gap + lines.length * lh + subGap;
-    subLines.forEach((t, i) => items.push({ text: t, x, y: subTop + slh * (i + 1) - ss * 0.3, font: subFont, family: "Geist", size: ss, weight: 400, spacing: 0, align, alpha: 0.72 }));
+    subLines.forEach((t, i) => items.push({ text: t, x, y: subTop + slh * (i + 1) - ss * 0.3, font: subFont, family: F.family, size: ss, weight: 400, spacing: 0, align, alpha: 0.72 }));
     return items;
   }
 
@@ -937,6 +951,7 @@
     row(textGroup, "Label", withEye("showCaption", "label", textField("caption", "Category")), "c-caption"),
     row(textGroup, "Headline", withEye("showHeadline", "headline", textField("headline", "Your headline here")), "c-headline"),
     row(textGroup, "Subtitle", withEye("showSubtitle", "subtitle", textField("subtitle", "Optional supporting line")), "c-subtitle"),
+    row(textGroup, "Font", seg("textFont", [["sans", "Sans"], ["mono", "Mono"], ["pixel", "Pixel"]], "Headline font")),
     row(textGroup, "Position", seg("textPos", [["tl", "Top"], ["center", "Centre"], ["bl", "Bottom"]], "Text position")),
     row(textGroup, "Size", slider("textSize", 24, 160, 2, "px"), "c-textSize"),
   ];
@@ -986,6 +1001,7 @@
     if (P_KEYS.has(key)) buildP();
     if (COLOUR_KEYS.has(key)) buildColours();
     if (key === "format") fitView();
+    if (key === "textFont") loadTextFont();
     if ((key === "generator" || key === "seed") && (!S.filename || S.filename === prevAuto)) S.filename = "";
     binders[key]?.();
     refreshUI();
@@ -1059,7 +1075,7 @@
   async function run(fn) {
     if (busy) return;
     busy = true; refreshUI();
-    try { await document.fonts.ready; await fn(); }
+    try { await loadTextFont(); await document.fonts.ready; await fn(); }
     catch (e) { console.error(e); toast(e && e.message ? e.message : "Export failed"); }
     finally { busy = false; setProgress(null); refreshUI(); }
   }
@@ -1241,6 +1257,7 @@
   refreshUI();
   fitView();
   document.fonts.ready.then(() => (dirty = true));
+  loadTextFont();
   requestAnimationFrame(tick);
 })();
 </script>
