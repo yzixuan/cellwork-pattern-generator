@@ -39,9 +39,10 @@
   /* Thin, translucent scrollbar. Chrome and Safari use the ::-webkit-scrollbar rules (6px);
      Firefox only understands the standard properties, so give them to it alone —
      Chrome ignores the webkit rules whenever the standard ones are set. */
-  #controls::-webkit-scrollbar { width: 6px; }
+  #controls::-webkit-scrollbar { width: 10px; }
   #controls::-webkit-scrollbar-track { background: transparent; }
-  #controls::-webkit-scrollbar-thumb { background: rgba(237, 234, 241, 0.14); border-radius: 6px; }
+  /* Transparent borders inset the 6px thumb: 3px clear of the panel edge, 3px from top and bottom. */
+  #controls::-webkit-scrollbar-thumb { background: rgba(237, 234, 241, 0.14); background-clip: padding-box; border: solid transparent; border-width: 3px 3px 3px 1px; border-radius: 6px; }
   #controls::-webkit-scrollbar-thumb:hover { background: rgba(237, 234, 241, 0.28); }
   @supports not selector(::-webkit-scrollbar) {
     #controls { scrollbar-width: thin; scrollbar-color: rgba(237, 234, 241, 0.18) transparent; }
