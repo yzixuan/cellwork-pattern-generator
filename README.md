@@ -19,6 +19,7 @@ A generative pattern generator for publishing assets. Pick a pattern, tune it, a
 | SVG | Print or editing in design tools | Vector; grain isn't included |
 | Video (MP4) | Motion | 1080p, 30 fps, via WebCodecs; falls back to WebM |
 | GIF | Places that don't take video | 720 px, 20 fps; set Grain to 0 for smaller files |
+| Code (HTML) | Live, looping pattern on a website | A ~24 KB self-contained page; **Copy embed code** gives a `<div>` + `<script>` snippet to paste into any site |
 
 ## How it works
 

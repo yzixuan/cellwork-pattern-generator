@@ -96,6 +96,7 @@
   .toggle[aria-pressed="true"] { color: var(--ground); background: var(--text); border-color: var(--text); }
 
   .btn.block { width: 100%; margin-top: 4px; }
+  .embed-box { height: auto; padding: 10px 12px; font-size: 11.5px; line-height: 1.45; resize: vertical; }
   .btn { height: 38px; border-radius: 7px; border: 1px solid var(--line); background: var(--raised); font-weight: 500; font-size: 13.5px; }
   .btn:hover:not(:disabled) { background: var(--raised-hi); }
   .btn.primary { background: var(--text); color: var(--ground); border-color: var(--text); }
@@ -160,7 +161,8 @@
 <script>
 (() => {
   "use strict";
-  const TAU = Math.PI * 2;
+  // This script's own source: the code export copies the drawing engine out of it.
+  const APP_SOURCE = document.currentScript ? document.currentScript.textContent : "";
   const GIF_URL = "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js";
   const MUXER_URL = "https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.mjs";
 
@@ -176,7 +178,6 @@
     ["#B18CFF", "Lavender"], ["#1EFFB0", "Mint"], ["#D9A77E", "Sand"],
     ["#4C9DFF", "Sky blue"], ["#EDEAF1", "Chalk"], ["#FF7A5C", "Coral"],
   ];
-  const GLYPHS = ".:-=+*#%@";
 
   const DEFAULTS = {
     generator: "waves", seed: 310, scale: 100, complexity: 3, distortion: 50,
@@ -191,7 +192,7 @@
   // People who ask their system for reduced motion start with Animation off.
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) S.mode = "off";
   try { Object.assign(S, JSON.parse(localStorage.getItem("cellwork-v1") || "{}")); } catch (e) {}
-  if (!["png", "svg", "mp4", "gif"].includes(S.fileType)) S.fileType = "png";
+  if (!["png", "svg", "mp4", "gif", "html"].includes(S.fileType)) S.fileType = "png";
   // File type follows Animation until someone picks one: Video when it's on, PNG when it's off.
   if (!S.fileTypeChosen) S.fileType = S.mode === "off" ? "png" : "mp4";
   if (S.mode === "off" && (S.fileType === "mp4" || S.fileType === "gif")) {
@@ -203,6 +204,12 @@
   if (S.headline === "Generative Art, After Hours") S.headline = DEFAULTS.headline;
   // "Value sets" is hidden for now, so don't leave anyone stuck on a choice they can't see.
   S.mapping = "both";
+
+  /* ENGINE:START
+     Everything from here to ENGINE:END draws patterns and depends only on the settings object
+     S. The "Code (HTML)" export copies this block verbatim into a standalone player. */
+  const TAU = Math.PI * 2;
+  const GLYPHS = ".:-=+*#%@";
 
   /* ---------- maths helpers ---------- */
   function mulberry32(a) {
@@ -382,9 +389,6 @@
       },
     },
   };
-
-  // A saved choice may point at a pattern that's gone or hidden; fall back before the menu is built.
-  if (!GENS[S.generator] || GENS[S.generator].hidden) S.generator = DEFAULTS.generator;
 
   let P = null;
   function buildP() {
@@ -680,13 +684,6 @@
     mono: { family: "Geist Mono", css: '"Geist Mono", ui-monospace, monospace', head: 500, label: 500, track: -0.01 },
     pixel: { family: "Pixelify Sans", css: '"Pixelify Sans", "Geist Mono", ui-monospace, monospace', head: 600, label: 400, track: 0 },
   };
-  // Canvas text doesn't trigger web-font loading, so load the chosen face before drawing with it.
-  function loadTextFont() {
-    const F = TEXT_FONTS[S.textFont] || TEXT_FONTS.sans;
-    return Promise.all([F.head, F.label, 400].map((w) => document.fonts.load(`${w} 40px "${F.family}"`)))
-      .then(() => { dirty = true; }, () => {});
-  }
-
   function textItems(W, H, s) {
     if (!S.textOn) return [];
     const pad = Math.round(Math.min(W, H) * 0.07);
@@ -794,6 +791,18 @@
     }
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
     ctx.globalAlpha = 1;
+  }
+
+  /* ENGINE:END */
+
+  // A saved choice may point at a pattern that's gone or hidden; fall back before the menu is built.
+  if (!GENS[S.generator] || GENS[S.generator].hidden) S.generator = DEFAULTS.generator;
+
+  // Canvas text doesn't trigger web-font loading, so load the chosen face before drawing with it.
+  function loadTextFont() {
+    const F = TEXT_FONTS[S.textFont] || TEXT_FONTS.sans;
+    return Promise.all([F.head, F.label, 400].map((w) => document.fonts.load(`${w} 40px "${F.family}"`)))
+      .then(() => { dirty = true; }, () => {});
   }
 
   /* ---------- preview ---------- */
@@ -982,12 +991,17 @@
     svg: { label: "SVG", run: () => exportSVG(), motion: false },
     mp4: { label: "Video (MP4)", run: () => exportVideo(), motion: true },
     gif: { label: "GIF", run: () => exportGIF(), motion: true },
+    html: { label: "Code (HTML)", run: () => exportHTML(), motion: false },
   };
   const typeSelect = select("fileType", Object.entries(FILE_TYPES).map(([k, v]) => [k, v.label]));
   row(g, "File type", typeSelect, "c-fileType");
   const pngRow = row(g, "PNG size", seg("pngScale", [[1, "1×"], [2, "2×"]], "PNG resolution"));
   const bDownload = h("button", { class: "btn primary block", type: "button", onclick: () => run(FILE_TYPES[S.fileType].run) }, ["Download"]);
-  g.append(bDownload);
+  const bEmbed = h("button", { class: "btn block", type: "button", onclick: () => copyEmbed() }, ["Copy embed code"]);
+  // Shown only if the clipboard refuses, so the code can still be selected and copied by hand.
+  const embedBox = h("textarea", { class: "field embed-box", readonly: "", rows: "5", "aria-label": "Embed code", spellcheck: "false" });
+  embedBox.hidden = true;
+  g.append(bDownload, bEmbed, embedBox);
   const progFill = h("div", { class: "progress-fill" });
   const progLabel = h("div", { class: "progress-label" });
   const progress = h("div", { class: "progress" }, [h("div", { class: "progress-track" }, [progFill]), progLabel]);
@@ -1047,6 +1061,8 @@
     [...typeSelect.options].forEach((o) => (o.disabled = FILE_TYPES[o.value].motion && !motion));
     const blocked = FILE_TYPES[S.fileType].motion && !motion;
     pngRow.hidden = S.fileType !== "png";
+    bEmbed.hidden = S.fileType !== "html";
+    if (S.fileType !== "html") embedBox.hidden = true;
     bDownload.disabled = busy || blocked;
     const clip = `${S.loop}s seamless loop`;
     hint.innerHTML = blocked
@@ -1054,6 +1070,7 @@
       : {
           mp4: `${clip}, 1080p.`,
           gif: `${clip}, 720px.`,
+          html: `Runs live and loops forever. Open the page in a browser, or paste the embed code into a site.`,
         }[S.fileType] || ""; // stills need no note
     hint.hidden = !hint.innerHTML;
   }
@@ -1151,6 +1168,105 @@
     paint(c.getContext("2d"), c.width, c.height, k, stillTime());
     const blob = await new Promise((r) => c.toBlob(r, "image/png"));
     await saveFile(`${fileBase()}.png`, blob);
+  }
+
+  /* ---------- code export ---------- */
+  // The player bundles the ENGINE block above with the current settings. It fills its
+  // container, loops (or holds the paused frame), stops drawing while off screen, and shows a
+  // still frame to people who ask for reduced motion.
+  const FONT_CSS = {
+    sans: "https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap",
+    mono: "https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap",
+    pixel: "https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap",
+  };
+  const RENDER_KEYS = ["generator", "seed", "scale", "complexity", "distortion", "shape", "spacing", "dotSize", "mapping",
+    "shades", "threshold", "texture", "mode", "loop", "tone", "color", "opacity", "grain", "textOn", "caption", "headline",
+    "subtitle", "showCaption", "showHeadline", "showSubtitle", "textFont", "textPos", "textSize"];
+  function engineSource() {
+    const a = APP_SOURCE.indexOf("/* ENGINE:START"), b = APP_SOURCE.indexOf("/* ENGINE:END */");
+    if (a < 0 || b < 0) throw new Error("Couldn't find the pattern engine to export.");
+    // Drop block comments, whole-line comments and indentation to keep the embed small.
+    // (The engine has no "/*" inside strings, so removing block comments this way is safe.)
+    return APP_SOURCE.slice(APP_SOURCE.indexOf("*/", a) + 2, b)
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("//")).join("\n");
+  }
+  function playerSource(mountExpr) {
+    const settings = {};
+    for (const k of RENDER_KEYS) settings[k] = S[k];
+    const f = fmt();
+    return [
+      "(function () {",
+      '"use strict";',
+      "var mount = " + mountExpr + ";",
+      "var S = " + JSON.stringify(settings) + ";",
+      "var BASE_W = " + f.w + ", BASE_H = " + f.h + ", START = " + JSON.stringify(+stillTime().toFixed(3)) + ";",
+      "var FONT_CSS = " + JSON.stringify(S.textOn ? FONT_CSS[S.textFont] || FONT_CSS.sans : "") + ";",
+      engineSource(),
+      "buildP(); buildColours();",
+      "var canvas = document.createElement('canvas'); canvas.style.cssText = 'display:block;width:100%;height:100%';",
+      "mount.appendChild(canvas);",
+      "var ctx = canvas.getContext('2d');",
+      "var still = S.mode === 'off' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);",
+      "var W = 1, H = 1, t = START, last = 0, raf = 0, onScreen = true;",
+      "function draw() { paint(ctx, W, H, Math.sqrt((W * H) / (BASE_W * BASE_H)), t); }",
+      "function size() { var d = Math.min(window.devicePixelRatio || 1, 2), r = mount.getBoundingClientRect();",
+      "  W = Math.max(1, Math.round(r.width * d)); H = Math.max(1, Math.round(r.height * d)); canvas.width = W; canvas.height = H; draw(); }",
+      "function frame(now) { t += Math.min(0.1, (now - last) / 1000); last = now; draw(); raf = requestAnimationFrame(frame); }",
+      "function play() { if (still || raf || !onScreen) return; last = performance.now(); raf = requestAnimationFrame(frame); }",
+      "function stop() { cancelAnimationFrame(raf); raf = 0; }",
+      "if (FONT_CSS) { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = FONT_CSS; document.head.appendChild(l); }",
+      "if (document.fonts) document.fonts.ready.then(function () { setTimeout(draw, 50); });",
+      "new ResizeObserver(size).observe(mount);",
+      "new IntersectionObserver(function (e) { onScreen = e[0].isIntersecting; if (onScreen) play(); else stop(); }).observe(mount);",
+      "size(); play();",
+      "})();",
+    ].join("\n");
+  }
+  function exportHTML() {
+    const f = fmt();
+    const page = [
+      "<!doctype html>",
+      '<html lang="en">',
+      "<head>",
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      "<title>" + fileBase().replace(/[<&]/g, "") + " · Cellwork Pattern Generator</title>",
+      "<style>html,body{margin:0;height:100%;background:" + BG + "}#cellwork{position:fixed;inset:0}</style>",
+      "</head>",
+      "<body>",
+      '<div id="cellwork" role="img" aria-label="Animated generative pattern"></div>',
+      "<script>",
+      playerSource('document.getElementById("cellwork")'),
+      "</" + "script>",
+      "</body>",
+      "</html>",
+    ].join("\n");
+    return saveFile(`${fileBase()}.html`, new Blob([page], { type: "text/html" }));
+  }
+  function embedSnippet() {
+    const f = fmt();
+    return [
+      "<!-- Cellwork Pattern Generator: " + fileBase() + " -->",
+      '<div style="position:relative;width:100%;aspect-ratio:' + f.w + " / " + f.h + ";background:" + BG + '" role="img" aria-label="Animated generative pattern"></div>',
+      "<script>",
+      playerSource("document.currentScript.previousElementSibling"),
+      "</" + "script>",
+    ].join("\n");
+  }
+  function copyEmbed() {
+    let code;
+    try { code = embedSnippet(); } catch (e) { toast(e.message); return; }
+    // Called straight from the click so the clipboard allows it; fall back to a selectable box.
+    const showBox = () => {
+      embedBox.value = code;
+      embedBox.hidden = false;
+      embedBox.focus();
+      embedBox.select();
+      toast("Copy the embed code from the box below");
+    };
+    if (!navigator.clipboard || !navigator.clipboard.writeText) return showBox();
+    navigator.clipboard.writeText(code).then(() => { embedBox.hidden = true; toast(`Embed code copied (${Math.round(code.length / 1000)} KB)`); }, showBox);
   }
 
   function exportSVG() {
