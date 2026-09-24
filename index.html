@@ -185,6 +185,8 @@
   let S = { ...DEFAULTS };
   try { Object.assign(S, JSON.parse(localStorage.getItem("cellwork-v1") || "{}")); } catch (e) {}
   if (!["png", "svg", "mp4", "gif"].includes(S.fileType)) S.fileType = "png";
+  // "Value sets" is hidden for now, so don't leave anyone stuck on a choice they can't see.
+  S.mapping = "both";
 
   /* ---------- maths helpers ---------- */
   function mulberry32(a) {
@@ -979,7 +981,7 @@
     document.getElementById("caption").textContent = `${GENS[S.generator].name} · Seed ${S.seed} · ${f.w} × ${f.h}`;
     loopRow.hidden = S.mode !== "ambient";
     sizeRow.querySelector("label").textContent = S.shape === "glyph" ? "Glyph size" : S.shape === "dot" ? "Dot size" : "Cell size";
-    mapRow.hidden = S.shape === "glyph";
+    mapRow.hidden = true; // "Value sets" is hidden for now; see the reset where settings load
     distRow.hidden = !!GENS[S.generator].noDistortion;
     textRows.forEach((r) => (r.hidden = !S.textOn));
     nameInput.placeholder = autoName();
