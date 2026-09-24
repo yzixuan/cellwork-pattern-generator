@@ -1038,11 +1038,10 @@
     hint.innerHTML = blocked
       ? `Turn on Animation to export ${FILE_TYPES[S.fileType].label}, or pick PNG or SVG.`
       : {
-          png: `Best for web and social stills.`,
-          svg: `Vector, for print or editing in design tools. Grain isn't included.`,
           mp4: `${clip}, 1080p. The smallest and smoothest option for motion.`,
           gif: `${clip}, 720px. Use only where video isn't accepted; set Grain to 0 for a smaller file.`,
-        }[S.fileType];
+        }[S.fileType] || ""; // stills need no note
+    hint.hidden = !hint.innerHTML;
   }
 
   document.getElementById("playpause").addEventListener("click", () => { playing = !playing; refreshUI(); });
