@@ -178,7 +178,7 @@
     shape: "dot", spacing: 16, dotSize: 90, mapping: "both", shades: 5, threshold: 8, texture: 10,
     mode: "ambient", loop: 6,
     tone: "dark", color: "#B18CFF", opacity: 95, grain: 16,
-    textOn: false, caption: "Category", headline: "Your headline here", textPos: "bl", textSize: 72,
+    textOn: false, caption: "Category", headline: "Your headline here", subtitle: "A short line of supporting text", textPos: "bl", textSize: 72,
     format: "16:9", fileType: "png", pngScale: 1, filename: "",
   };
 
@@ -674,27 +674,36 @@
   function textItems(W, H, s) {
     if (!S.textOn) return [];
     const pad = Math.round(Math.min(W, H) * 0.07);
-    const hs = S.textSize * s, cs = Math.max(9 * s, hs * 0.26);
+    const hs = S.textSize * s, cs = Math.max(9 * s, hs * 0.26), ss = Math.max(10 * s, hs * 0.36);
     const headFont = `600 ${hs}px Geist, ui-sans-serif, system-ui, sans-serif`;
     const capFont = `500 ${cs}px "Geist Mono", ui-monospace, monospace`;
-    measure.font = headFont;
+    const subFont = `400 ${ss}px Geist, ui-sans-serif, system-ui, sans-serif`;
     const maxW = W * (S.textPos === "center" ? 0.8 : 0.62);
-    const lines = [];
-    let line = "";
-    for (const word of S.headline.trim().split(/\s+/).filter(Boolean)) {
-      const test = line ? line + " " + word : word;
-      if (line && measure.measureText(test).width > maxW) { lines.push(line); line = word; } else line = test;
-    }
-    if (line) lines.push(line);
+    const wrap = (text, font) => {
+      measure.font = font;
+      const out = [];
+      let line = "";
+      for (const word of text.trim().split(/\s+/).filter(Boolean)) {
+        const test = line ? line + " " + word : word;
+        if (line && measure.measureText(test).width > maxW) { out.push(line); line = word; } else line = test;
+      }
+      if (line) out.push(line);
+      return out;
+    };
+    const lines = wrap(S.headline, headFont);
+    const subLines = wrap(S.subtitle || "", subFont);
     const cap = S.caption.trim().toUpperCase();
     const lh = hs * 1.06, gap = cap ? cs * 1.9 : 0;
-    const blockH = gap + lines.length * lh;
+    const slh = ss * 1.35, subGap = subLines.length ? hs * 0.42 : 0;
+    const blockH = gap + lines.length * lh + subGap + subLines.length * slh;
     const top = S.textPos === "tl" ? pad : S.textPos === "center" ? (H - blockH) / 2 : H - pad - blockH;
     const align = S.textPos === "center" ? "center" : "left";
     const x = align === "center" ? W / 2 : pad;
     const items = [];
     if (cap) items.push({ text: cap, x, y: top + cs, font: capFont, family: "Geist Mono", size: cs, weight: 500, spacing: cs * 0.14, align, alpha: 0.7 });
     lines.forEach((t, i) => items.push({ text: t, x, y: top + gap + lh * (i + 1) - hs * 0.2, font: headFont, family: "Geist", size: hs, weight: 600, spacing: -hs * 0.02, align, alpha: 1 }));
+    const subTop = top + gap + lines.length * lh + subGap;
+    subLines.forEach((t, i) => items.push({ text: t, x, y: subTop + slh * (i + 1) - ss * 0.3, font: subFont, family: "Geist", size: ss, weight: 400, spacing: 0, align, alpha: 0.72 }));
     return items;
   }
 
@@ -923,6 +932,7 @@
   const textRows = [
     row(textGroup, "Eyebrow", textField("caption", "Category"), "c-caption"),
     row(textGroup, "Headline", textField("headline", "Your headline here"), "c-headline"),
+    row(textGroup, "Subtitle", textField("subtitle", "Optional supporting line"), "c-subtitle"),
     row(textGroup, "Position", seg("textPos", [["tl", "Top"], ["center", "Centre"], ["bl", "Bottom"]], "Text position")),
     row(textGroup, "Size", slider("textSize", 24, 160, 2, "px"), "c-textSize"),
   ];
