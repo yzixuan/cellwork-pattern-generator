@@ -506,10 +506,10 @@
   }
 
   // Clifford attractor:  x' = sin(a·y) + c·cos(a·x),  y' = sin(b·x) + d·cos(b·y).
-  // Unlike Lorenz, successive points jump all over the shape, so there is no line to trace.
-  // In Ambient the orbit "develops": points settle in like dust over 80% of the loop until
-  // the filaments emerge, hold, then fade, so the loop starts and ends empty. The parameters
-  // stay fixed so the shape doesn't wobble while it forms.
+  // Iterated a few hundred thousand times; each cell counts how often the orbit lands in it.
+  // In Ambient the four parameters drift round a small circle once per loop, so the fine
+  // filaments slide and twist through the shape and the loop joins seamlessly.
+  const CLIFF_FLOW = 0.12; // how far the parameters drift
   const cliffordParams = (base, amp, T) => [
     base[0] + amp * Math.cos(T), base[1] + amp * Math.sin(T),
     base[2] + amp * 0.5 * Math.sin(T + 1), base[3] + amp * 0.5 * Math.cos(T + 2),
@@ -522,8 +522,8 @@
     const key = `${S.seed}`;
     if (P.cliffPickKey === key) return P.cliffPick;
     const rng = mulberry32(S.seed * 97 + 3);
-    const amp = 0;
-    const PHASES = 1, STEPS = 4000, GRID = 64;
+    const amp = CLIFF_FLOW;
+    const PHASES = 6, STEPS = 4000, GRID = 64;
     let best = null, bestScore = -1;
     for (let tries = 0; tries < 150 && bestScore < 900; tries++) {
       const base = [rng() * 4 - 2, rng() * 4 - 2, rng() * 3 - 1.5, rng() * 3 - 1.5];
@@ -552,19 +552,14 @@
 
   function buildClifford(T, cols, rows, u0, v0, du) {
     const drawing = S.mode === "ambient";
-    const key = `${drawing ? T.toFixed(5) : "full"}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
+    const key = `${drawing ? T.toFixed(5) : "still"}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
     if (P.cliffKey === key) return;
     const pick = pickClifford();
     const [a, b, c, d] = cliffordParams(pick.base, pick.amp, drawing ? T : 0);
-    // Fit the measured bounds inside the frame, then apply Scale as zoom.
+    // Fit the bounds measured across the whole drift inside the frame, then apply Scale.
     const fit = Math.min((2 * P.ax) / pick.sx, (2 * P.ay) / pick.sy) * 0.88 * P.f;
-    const tau = drawing ? T / TAU : 1;
-    // Squared so the sparse "dust" phase lasts longer before the shape fills in; starts at 0
-    // so the first frame matches the empty last frame.
-    const grow = drawing ? smooth(0, 0.8, tau) ** 2 : 1;
-    const fade = drawing ? 1 - smooth(0.9, 1, tau) : 1;
-    const full = 60000 + P.cx * 60000, N = Math.floor(full * grow);
     const hist = new Float32Array(cols * rows);
+    const N = 60000 + P.cx * 60000;
     let x = 0.1, y = 0.1;
     for (let i = 0; i < N + 100; i++) {
       const nx = Math.sin(a * y) + c * Math.cos(a * x);
@@ -574,13 +569,10 @@
       const ix = Math.round(((x - pick.cx) * fit - u0) / du), iy = Math.round(((y - pick.cy) * fit - v0) / du);
       if (ix >= 0 && iy >= 0 && ix < cols && iy < rows) hist[iy * cols + ix]++;
     }
-    // Scale counts up to what the finished shape would hold, so early specks show at their
-    // eventual brightness and the shape fills in rather than brightening. Log scale keeps faint
-    // filaments visible next to dense cores.
+    // Log scale so faint filaments still show next to dense cores.
     let max = 0;
-    const g = Math.max(grow, 1e-3);
-    for (let i = 0; i < hist.length; i++) { hist[i] = Math.log1p(hist[i] / g); if (hist[i] > max) max = hist[i]; }
-    if (max > 0) for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(hist[i] / max, 0.85) * fade;
+    for (let i = 0; i < hist.length; i++) { hist[i] = Math.log1p(hist[i]); if (hist[i] > max) max = hist[i]; }
+    if (max > 0) for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(hist[i] / max, 0.85);
     P.cliff = { val: hist, cols, rows, u0, v0, du };
     P.cliffKey = key;
   }
