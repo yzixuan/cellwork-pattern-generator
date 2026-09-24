@@ -104,10 +104,6 @@
   #view { display: block; max-width: 100%; border-radius: 3px; box-shadow: 0 0 0 1px var(--line), 0 30px 80px rgba(0,0,0,.45); }
   .stage-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   #caption { font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); font-variant-numeric: tabular-nums; }
-  .stage-actions { display: flex; gap: 6px; }
-  .ghost { height: 28px; padding: 0 11px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: 11.5px var(--mono); display: inline-flex; align-items: center; gap: 6px; }
-  .ghost:hover { color: var(--text); background: var(--raised); }
-  .ghost svg { width: 12px; height: 12px; }
 
   #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 8px); padding: 9px 14px; border-radius: 8px; background: var(--text); color: var(--ground); font-size: 13px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 10; max-width: calc(100% - 32px); }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -145,9 +141,6 @@
     <div class="frame" id="frame"><canvas id="view" aria-label="Pattern preview"></canvas></div>
     <div class="stage-bar">
       <span id="caption"></span>
-      <div class="stage-actions">
-        <button class="ghost" id="playpause" type="button"></button>
-      </div>
     </div>
   </main>
 </div>
@@ -184,6 +177,8 @@
   };
 
   let S = { ...DEFAULTS };
+  // People who ask their system for reduced motion start with Animation off.
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) S.mode = "off";
   try { Object.assign(S, JSON.parse(localStorage.getItem("cellwork-v1") || "{}")); } catch (e) {}
   if (!["png", "svg", "mp4", "gif"].includes(S.fileType)) S.fileType = "png";
   // File type follows Animation until someone picks one: Video when it's on, PNG when it's off.
@@ -462,8 +457,7 @@
   }
 
   function buildAttractor(T, cols, rows, u0, v0, du) {
-    const drawing = S.mode === "ambient";
-    const key = `${drawing ? T.toFixed(5) : "full"}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
+    const key = `${T.toFixed(5)}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
     if (P.attKey === key) return;
     const L = traceLorenz();
     const pitch = ((8 + P.dist * 0.5 + L.tilt) * Math.PI) / 180; // Distortion tilts the camera
@@ -499,18 +493,18 @@
       Object.assign(L, { viewKey, cell, W, ref: lit.length ? lit[Math.floor(lit.length * 0.9)] : 1 });
     }
 
-    // Ambient: the path draws itself over 80% of the loop with a bright head, holds, then
-    // fades out, so the loop starts and ends empty. Other modes show the finished shape.
-    const tau = drawing ? T / TAU : 1;
-    const grow = drawing ? smooth(0, 0.8, tau) : 1;
-    const fade = drawing ? 1 - smooth(0.9, 1, tau) : 1;
+    // The path draws itself over 80% of the loop with a bright head, holds, then fades out,
+    // so the loop starts and ends empty. With Animation off it freezes on the current frame.
+    const tau = T / TAU;
+    const grow = smooth(0, 0.8, tau);
+    const fade = 1 - smooth(0.9, 1, tau);
     const shown = Math.floor(count * grow);
     const head = Math.max(1, Math.floor(count * 0.02));
     const hist = new Float32Array(cols * rows);
     for (let i = 0; i < shown; i++) {
       const c = L.cell[i];
       if (c < 0) continue;
-      hist[c] += L.W[i] * (drawing && grow < 1 && i > shown - head ? 4 : 1);
+      hist[c] += L.W[i] * (grow < 1 && i > shown - head ? 4 : 1);
     }
     for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(Math.min(1, hist[i] / L.ref), 0.6) * fade;
     P.att = { val: hist, cols, rows, u0, v0, du };
@@ -563,11 +557,10 @@
   }
 
   function buildClifford(T, cols, rows, u0, v0, du) {
-    const drawing = S.mode === "ambient";
-    const key = `${drawing ? T.toFixed(5) : "still"}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
+    const key = `${T.toFixed(5)}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
     if (P.cliffKey === key) return;
     const pick = pickClifford();
-    const [a, b, c, d] = cliffordParams(pick.base, pick.amp, drawing ? T : 0);
+    const [a, b, c, d] = cliffordParams(pick.base, pick.amp, T);
     // Fit the bounds measured across the whole drift inside the frame, then apply Scale.
     const fit = Math.min((2 * P.ax) / pick.sx, (2 * P.ay) / pick.sy) * 0.88 * P.f;
     const hist = new Float32Array(cols * rows);
@@ -644,7 +637,7 @@
     P.ax = W / 2 / half; P.ay = H / 2 / half;
     if (S.generator === "squares") placeSquares();
     if (S.generator === "rain") placeDrops();
-    const T = S.mode === "ambient" ? TAU * ((time / S.loop) % 1) : 0;
+    const T = TAU * ((time / S.loop) % 1);
     if (S.generator === "attractor") buildAttractor(T, cols, rows, (ox - W / 2) / half, (oy - H / 2) / half, cell / half);
     if (S.generator === "clifford") buildClifford(T, cols, rows, (ox - W / 2) / half, (oy - H / 2) / half, cell / half);
     const gen = GENS[S.generator].fn;
@@ -796,8 +789,7 @@
   const view = document.getElementById("view");
   const vctx = view.getContext("2d");
   const frameEl = document.getElementById("frame");
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let playing = !reduced, clock = 0, last = performance.now(), dirty = true;
+  let clock = 0, last = performance.now(), dirty = true;
   const fmt = () => FORMATS[S.format] || FORMATS["16:9"];
 
   function fitView() {
@@ -815,15 +807,15 @@
   }
   new ResizeObserver(fitView).observe(frameEl);
 
-  function previewTime(now) {
-    if (S.mode === "ambient") return clock;
-    return 0;
+  // Animation Off stops the clock, so the preview (and still exports) freeze on the current frame.
+  function previewTime() {
+    return clock;
   }
   function tick(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     let animating = false;
-    if (S.mode === "ambient" && playing) { clock += dt; animating = true; }
+    if (S.mode === "ambient") { clock += dt; animating = true; }
     if (animating || dirty) {
       paint(vctx, view.width, view.height, view.width / fmt().w, previewTime(now));
       dirty = false;
@@ -1039,11 +1031,6 @@
     textRows.forEach((r) => (r.hidden = !S.textOn));
     nameInput.placeholder = autoName();
     if (document.activeElement !== nameInput) nameInput.value = S.filename;
-    const pp = document.getElementById("playpause");
-    pp.hidden = S.mode !== "ambient";
-    pp.innerHTML = playing
-      ? '<svg viewBox="0 0 12 12" fill="currentColor"><rect x="2.5" y="2" width="2.4" height="8" rx=".5"/><rect x="7.1" y="2" width="2.4" height="8" rx=".5"/></svg>Pause'
-      : '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M3 2.2v7.6a.5.5 0 0 0 .77.42l5.9-3.8a.5.5 0 0 0 0-.84l-5.9-3.8A.5.5 0 0 0 3 2.2Z"/></svg>Play';
     const motion = S.mode !== "off";
     // Video and GIF need motion; keep them listed but unselectable while Motion is off.
     [...typeSelect.options].forEach((o) => (o.disabled = FILE_TYPES[o.value].motion && !motion));
@@ -1060,7 +1047,6 @@
     hint.hidden = !hint.innerHTML;
   }
 
-  document.getElementById("playpause").addEventListener("click", () => { playing = !playing; refreshUI(); });
   document.getElementById("shuffle").addEventListener("click", () => {
     const r = Math.random;
     // Patterns with a preferred spacing (the attractors) stay near it; others pick 10–25px.
@@ -1109,7 +1095,7 @@
   const fileBase = () => (S.filename.trim() || autoName()).replace(/\.(png|svg|gif|mp4|webm)$/i, "").replace(/[\\/:*?"<>|]+/g, "-");
   const nextFrame = () => new Promise((r) => setTimeout(r, 0));
   function stillTime() {
-    return S.mode === "ambient" ? clock : 0;
+    return clock;
   }
   function framePlan(fps) {
     return { frames: Math.round(S.loop * fps) };
