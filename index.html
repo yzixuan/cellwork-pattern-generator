@@ -1043,14 +1043,21 @@
   document.getElementById("playpause").addEventListener("click", () => { playing = !playing; refreshUI(); });
   document.getElementById("shuffle").addEventListener("click", () => {
     const r = Math.random;
+    // Patterns with a preferred spacing (the attractors) stay near it; others pick 10–25px.
+    const pref = GENS[S.generator].spacing;
     Object.assign(S, {
       seed: Math.floor(r() * 9999) + 1,
       scale: 60 + Math.round(r() * 36) * 5,
       complexity: 1 + Math.floor(r() * 6),
       distortion: Math.round(r() * 100),
       color: SWATCHES[Math.floor(r() * SWATCHES.length)][0],
-      spacing: 10 + Math.floor(r() * 16),
+      spacing: pref ? pref + Math.floor(r() * 5) : 10 + Math.floor(r() * 16),
       shades: 3 + Math.floor(r() * 5),
+      // Kept inside ranges that still read well: smaller dots or a higher threshold thin
+      // most patterns out to almost nothing.
+      dotSize: 55 + Math.round(r() * 45),
+      threshold: Math.round(r() * 25),
+      texture: Math.round(r() * 40),
     });
     if (S.filename.match(/^[a-z]+-\d+$/)) S.filename = "";
     buildP(); buildColours();
