@@ -298,15 +298,17 @@
       name: "Squares",
       fn(u, v, T, P) {
         let m = 0;
-        const n = P.cx + 2, width = 0.035 + (P.dist / 100) * 0.12;
-        for (let i = 0; i < n; i++) {
-          const q = P.sq[i];
+        const width = 0.03 + (P.dist / 100) * 0.1;
+        for (const q of P.sqPlaced) {
+          const b = q.half / P.f, r = b * 0.22;
+          const dx = u - q.x, dy = v - q.y;
+          // Skip squares too far away to light this cell (exp(-5) is effectively 0).
+          const reach = b * 1.42 + width * 5;
+          if (dx > reach || dx < -reach || dy > reach || dy < -reach) continue;
           // Squares look the same every quarter turn, so k/4 turns per loop repeats cleanly.
           const a = q.ph + (T * q.k) / 4;
           const c = Math.cos(a), s = Math.sin(a);
-          const dx = u - q.x, dy = v - q.y;
           const px = Math.abs(c * dx + s * dy), py = Math.abs(-s * dx + c * dy);
-          const b = q.half / P.f, r = b * 0.22;
           const qx = px - b + r, qy = py - b + r;
           const sd = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
           m = Math.max(m, Math.exp(-Math.abs(sd) / width));
@@ -324,12 +326,35 @@
       f: S.scale / 100, cx: S.complexity, dist: S.distortion,
       r: [rng(), rng(), rng(), rng()],
       src: Array.from({ length: 8 }, () => [rng(), rng(), rng() * TAU]),
-      sq: Array.from({ length: 8 }, (_, i) => {
-        const off = 0.12 + 0.2 * rng(), ang = i * 2.39996 + rng() * 0.5;
-        return { x: Math.cos(ang) * off, y: Math.sin(ang) * off, half: 0.18 + 0.07 * i + (rng() - 0.5) * 0.04, ph: rng() * TAU, k: (1 + Math.floor(rng() * 3)) * (i % 2 ? -1 : 1) };
-      }),
-      noise: nz.noise, fbm: nz.fbm, ax: 1, ay: 1,
+      noise: nz.noise, fbm: nz.fbm, ax: 1, ay: 1, sqKey: "", sqPlaced: [],
     };
+  }
+
+  // Scatter the squares over the whole frame with best-candidate sampling: each new square
+  // takes the spot, out of a dozen random tries, that is farthest from those already placed.
+  // Depends on the frame's aspect, so it reruns when the format changes.
+  function placeSquares() {
+    const key = `${P.ax.toFixed(3)}:${P.ay.toFixed(3)}`;
+    if (P.sqKey === key) return;
+    const rng = mulberry32(S.seed * 31 + 5);
+    const n = Math.min(40, Math.round((3 + P.cx * 2.5) * Math.sqrt(P.ax * P.ay)));
+    const mx = P.ax * 0.92, my = P.ay * 0.92;
+    const placed = [];
+    for (let i = 0; i < n; i++) {
+      let best = null, bestD = -1;
+      for (let c = 0; c < 12; c++) {
+        const x = (rng() * 2 - 1) * mx, y = (rng() * 2 - 1) * my;
+        let d = Infinity;
+        for (const q of placed) d = Math.min(d, Math.hypot(x - q.x, y - q.y));
+        if (d > bestD) { bestD = d; best = { x, y }; }
+      }
+      best.half = 0.08 + 0.2 * Math.pow(rng(), 1.6); // mostly small, a few large
+      best.ph = rng() * TAU;
+      best.k = (1 + Math.floor(rng() * 3)) * (rng() < 0.5 ? -1 : 1);
+      placed.push(best);
+    }
+    P.sqKey = key;
+    P.sqPlaced = placed;
   }
 
   /* ---------- colour ---------- */
@@ -358,6 +383,7 @@
     const ox = (W - cols * cell) / 2 + cell / 2, oy = (H - rows * cell) / 2 + cell / 2;
     const half = Math.min(W, H) / 2;
     P.ax = W / 2 / half; P.ay = H / 2 / half;
+    if (S.generator === "squares") placeSquares();
     const T = S.mode === "ambient" ? TAU * ((time / S.loop) % 1) : 0;
     const revealing = S.mode === "reveal" && time < REVEAL_TOTAL;
     const gen = GENS[S.generator].fn;
