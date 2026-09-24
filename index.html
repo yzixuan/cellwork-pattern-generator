@@ -316,6 +316,30 @@
         return m;
       },
     },
+    rain: {
+      name: "Rain Drops",
+      fn(u, v, T, P) {
+        const tau = T / TAU, R = 0.5 / P.f, w = 0.022 + (P.dist / 100) * 0.05;
+        const reach = R * 1.25 + w * 3;
+        let m = 0;
+        for (const q of P.drops) {
+          // Each drop falls k times per loop; the landing spot cycles through k places,
+          // so the loop still repeats seamlessly.
+          const ph = tau * q.k - q.t0, cyc = Math.floor(ph), age = ph - cyc;
+          const spot = q.spots[((cyc % q.k) + q.k) % q.k];
+          const dx = u - spot[0], dy = v - spot[1];
+          if (dx > reach || dx < -reach || dy > reach || dy < -reach) continue;
+          const d = Math.hypot(dx, dy);
+          const radius = age * R * spot[2];
+          const fade = (1 - age) * (1 - age);
+          let val = Math.exp(-(((d - radius) / w) ** 2)) * fade;                   // outer ring
+          val += 0.45 * Math.exp(-(((d - radius * 0.55) / (w * 0.8)) ** 2)) * fade * smooth(0.02, 0.1, radius); // trailing ring
+          if (age < 0.06) val += (1 - age / 0.06) * Math.exp(-((d / (w * 1.6)) ** 2)); // splash on impact
+          m += val;
+        }
+        return Math.min(1, m);
+      },
+    },
   };
 
   let P = null;
@@ -326,7 +350,7 @@
       f: S.scale / 100, cx: S.complexity, dist: S.distortion,
       r: [rng(), rng(), rng(), rng()],
       src: Array.from({ length: 8 }, () => [rng(), rng(), rng() * TAU]),
-      noise: nz.noise, fbm: nz.fbm, ax: 1, ay: 1, sqKey: "", sqPlaced: [],
+      noise: nz.noise, fbm: nz.fbm, ax: 1, ay: 1, sqKey: "", sqPlaced: [], dropKey: "", drops: [],
     };
   }
 
@@ -357,6 +381,33 @@
     P.sqPlaced = placed;
   }
 
+  // Rain: landing spots spread over the frame (best of 4 random tries each, so drops
+  // don't clump), each drop with its own timing and 1-3 falls per loop.
+  function placeDrops() {
+    const key = `${P.ax.toFixed(3)}:${P.ay.toFixed(3)}`;
+    if (P.dropKey === key) return;
+    const rng = mulberry32(S.seed * 53 + 11);
+    const n = Math.min(60, Math.round((4 + P.cx * 4) * Math.sqrt(P.ax * P.ay)));
+    const mx = P.ax * 0.95, my = P.ay * 0.95;
+    const spots = [];
+    const pick = () => {
+      let best = null, bestD = -1;
+      for (let c = 0; c < 4; c++) {
+        const x = (rng() * 2 - 1) * mx, y = (rng() * 2 - 1) * my;
+        let d = Infinity;
+        for (const q of spots) d = Math.min(d, Math.hypot(x - q[0], y - q[1]));
+        if (d > bestD) { bestD = d; best = [x, y, 0.6 + 0.6 * rng()]; }
+      }
+      spots.push(best);
+      return best;
+    };
+    P.drops = Array.from({ length: n }, () => {
+      const k = 1 + Math.floor(rng() * 3);
+      return { k, t0: rng(), spots: Array.from({ length: k }, pick) };
+    });
+    P.dropKey = key;
+  }
+
   /* ---------- colour ---------- */
   const hexToRgb = (hex) => { const h = hex.replace("#", ""); const n = parseInt(h.length === 3 ? h.replace(/./g, "$&$&") : h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const mix = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
@@ -384,6 +435,7 @@
     const half = Math.min(W, H) / 2;
     P.ax = W / 2 / half; P.ay = H / 2 / half;
     if (S.generator === "squares") placeSquares();
+    if (S.generator === "rain") placeDrops();
     const T = S.mode === "ambient" ? TAU * ((time / S.loop) % 1) : 0;
     const revealing = S.mode === "reveal" && time < REVEAL_TOTAL;
     const gen = GENS[S.generator].fn;
