@@ -80,7 +80,7 @@
   .toggle { height: 24px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--raised); color: var(--muted); font: 11.5px var(--mono); }
   .toggle[aria-pressed="true"] { color: var(--ground); background: var(--text); border-color: var(--text); }
 
-  .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .btn.block { width: 100%; margin-top: 4px; }
   .btn { height: 38px; border-radius: 7px; border: 1px solid var(--line); background: var(--raised); font-weight: 500; font-size: 13.5px; }
   .btn:hover:not(:disabled) { background: var(--raised-hi); }
   .btn.primary { background: var(--text); color: var(--ground); border-color: var(--text); }
@@ -179,11 +179,12 @@
     mode: "ambient", loop: 6,
     tone: "dark", color: "#B18CFF", opacity: 95, grain: 16,
     textOn: false, caption: "Side project", headline: "Generative Art, After Hours", textPos: "bl", textSize: 72,
-    format: "16:9", pngScale: 1, filename: "",
+    format: "16:9", fileType: "png", pngScale: 1, filename: "",
   };
 
   let S = { ...DEFAULTS };
   try { Object.assign(S, JSON.parse(localStorage.getItem("cellwork-v1") || "{}")); } catch (e) {}
+  if (!["png", "svg", "mp4", "gif"].includes(S.fileType)) S.fileType = "png";
 
   /* ---------- maths helpers ---------- */
   function mulberry32(a) {
@@ -651,13 +652,17 @@
   g = group("Export");
   const nameInput = h("input", { id: "c-filename", class: "field", type: "text", spellcheck: "false", oninput: (e) => { S.filename = e.target.value; persist(); } });
   row(g, "File name", nameInput, "c-filename");
-  row(g, "PNG size", seg("pngScale", [[1, "1×"], [2, "2×"]], "PNG resolution"));
-  const bPNG = h("button", { class: "btn primary", type: "button", onclick: () => run(exportPNG) }, ["PNG"]);
-  const bSVG = h("button", { class: "btn", type: "button", onclick: () => run(exportSVG) }, ["SVG"]);
-  const bMP4 = h("button", { class: "btn", type: "button", onclick: () => run(exportVideo) }, ["Video"]);
-  const bGIF = h("button", { class: "btn", type: "button", onclick: () => run(exportGIF) }, ["GIF"]);
-  const exportBtns = [bPNG, bSVG, bMP4, bGIF];
-  g.append(h("div", { class: "export-grid" }, exportBtns));
+  const FILE_TYPES = {
+    png: { label: "PNG", run: () => exportPNG(), motion: false },
+    svg: { label: "SVG", run: () => exportSVG(), motion: false },
+    mp4: { label: "Video (MP4)", run: () => exportVideo(), motion: true },
+    gif: { label: "GIF", run: () => exportGIF(), motion: true },
+  };
+  const typeSelect = select("fileType", Object.entries(FILE_TYPES).map(([k, v]) => [k, v.label]));
+  row(g, "File type", typeSelect, "c-fileType");
+  const pngRow = row(g, "PNG size", seg("pngScale", [[1, "1×"], [2, "2×"]], "PNG resolution"));
+  const bDownload = h("button", { class: "btn primary block", type: "button", onclick: () => run(FILE_TYPES[S.fileType].run) }, ["Download"]);
+  g.append(bDownload);
   const progFill = h("div", { class: "progress-fill" });
   const progLabel = h("div", { class: "progress-label" });
   const progress = h("div", { class: "progress" }, [h("div", { class: "progress-track" }, [progFill]), progLabel]);
@@ -703,12 +708,21 @@
       ? '<svg viewBox="0 0 12 12" fill="currentColor"><rect x="2.5" y="2" width="2.4" height="8" rx=".5"/><rect x="7.1" y="2" width="2.4" height="8" rx=".5"/></svg>Pause'
       : '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M3 2.2v7.6a.5.5 0 0 0 .77.42l5.9-3.8a.5.5 0 0 0 0-.84l-5.9-3.8A.5.5 0 0 0 3 2.2Z"/></svg>Play';
     const motion = S.mode !== "off";
-    bMP4.disabled = bGIF.disabled = !motion || busy;
-    bPNG.disabled = bSVG.disabled = busy;
+    // Video and GIF need motion; keep them listed but unselectable while Motion is off.
+    [...typeSelect.options].forEach((o) => (o.disabled = FILE_TYPES[o.value].motion && !motion));
+    const blocked = FILE_TYPES[S.fileType].motion && !motion;
+    pngRow.hidden = S.fileType !== "png";
+    bDownload.disabled = busy || blocked;
     const secs = S.mode === "ambient" ? S.loop : 3;
-    hint.innerHTML = motion
-      ? `<b>PNG</b> or <b>SVG</b> for stills. <b>Video</b> (MP4, ${secs}s ${S.mode === "ambient" ? "seamless loop" : "reveal"}) is the smallest and smoothest for motion; <b>GIF</b> only where video isn't accepted.`
-      : `<b>PNG</b> for web and social, <b>SVG</b> for print or further editing. Turn on Motion to export video or GIF.`;
+    const clip = `${secs}s ${S.mode === "ambient" ? "seamless loop" : "reveal"}`;
+    hint.innerHTML = blocked
+      ? `Turn on Motion to export ${FILE_TYPES[S.fileType].label}, or pick PNG or SVG.`
+      : {
+          png: `Best for web and social stills.`,
+          svg: `Vector, for print or editing in design tools. Grain isn't included.`,
+          mp4: `${clip}, 1080p. The smallest and smoothest option for motion.`,
+          gif: `${clip}, 720px. Use only where video isn't accepted; set Grain to 0 for a smaller file.`,
+        }[S.fileType];
   }
 
   document.getElementById("replay").addEventListener("click", () => { revealStart = performance.now(); });
