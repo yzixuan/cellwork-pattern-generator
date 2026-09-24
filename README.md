@@ -33,7 +33,3 @@ python3 -m http.server 8000
 ```
 
 Then open http://localhost:8000.
-
-## Deploy
-
-Import the repo into [Vercel](https://vercel.com) with the Framework Preset set to **Other** and no build command. Vercel serves `index.html` from the root.
