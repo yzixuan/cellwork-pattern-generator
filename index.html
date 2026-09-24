@@ -296,6 +296,7 @@
     },
     squares: {
       name: "Squares",
+      hidden: true, // kept in code, left out of the pattern menu for now
       fn(u, v, T, P) {
         let m = 0;
         const width = 0.03 + (P.dist / 100) * 0.1;
@@ -341,6 +342,9 @@
       },
     },
   };
+
+  // A saved choice may point at a pattern that's gone or hidden; fall back before the menu is built.
+  if (!GENS[S.generator] || GENS[S.generator].hidden) S.generator = DEFAULTS.generator;
 
   let P = null;
   function buildP() {
@@ -661,7 +665,7 @@
 
   // Generator
   let g = group("Generator");
-  row(g, "Pattern", select("generator", Object.entries(GENS).map(([k, v]) => [k, v.name])), "c-generator");
+  row(g, "Pattern", select("generator", Object.entries(GENS).filter(([, v]) => !v.hidden).map(([k, v]) => [k, v.name])), "c-generator");
   const seedInput = h("input", { id: "c-seed", class: "field", type: "number", min: 0, max: 99999, value: S.seed, oninput: (e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) set("seed", v); } });
   binders.seed = () => { if (+seedInput.value !== S.seed) seedInput.value = S.seed; };
   const dice = h("button", { class: "icon-btn", type: "button", title: "New seed", "aria-label": "New seed", onclick: () => set("seed", Math.floor(Math.random() * 9999) + 1) });
@@ -1018,7 +1022,6 @@
   }
 
   /* ---------- start ---------- */
-  if (!GENS[S.generator]) S.generator = DEFAULTS.generator;
   if (!FORMATS[S.format]) S.format = DEFAULTS.format;
   buildP();
   buildColours();
