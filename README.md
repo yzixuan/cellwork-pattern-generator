@@ -8,7 +8,7 @@ A generative pattern generator for publishing assets. Pick a pattern, tune it, a
 - **Cell styles:** dots, squares, bars, crosses or glyphs, with spacing, size, shades, threshold and texture.
 - **Motion:** Off, Reveal (cells pop in) or Ambient (a seamless 2–12 s loop).
 - **Appearance:** dark or light tone, colour swatches or a custom colour, opacity and film grain.
-- **Text overlay:** optional eyebrow and headline, top, centre or bottom.
+- **Text overlay:** optional label, headline and subtitle, top, centre or bottom.
 - **Formats:** 16:9, square, 4:5, 9:16, link preview (1200×630) and banner (3:1).
 
 ## Export
