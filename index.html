@@ -355,7 +355,7 @@
     },
     clifford: {
       name: "Clifford Attractor",
-      spacing: 10,
+      spacing: 6, // fine cells show the speckle and filaments
       fn(u, v, T, P) {
         const A = P.cliff;
         const ix = Math.round((u - A.u0) / A.du), iy = Math.round((v - A.v0) / A.du);
