@@ -1038,7 +1038,7 @@
     hint.innerHTML = blocked
       ? `Turn on Animation to export ${FILE_TYPES[S.fileType].label}, or pick PNG or SVG.`
       : {
-          mp4: `${clip}, 1080p. The smallest and smoothest option for motion.`,
+          mp4: `${clip}, 1080p.`,
           gif: `${clip}, 720px.`,
         }[S.fileType] || ""; // stills need no note
     hint.hidden = !hint.innerHTML;
