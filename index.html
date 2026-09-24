@@ -507,89 +507,81 @@
   }
 
   // Clifford attractor:  x' = sin(a·y) + c·cos(a·x),  y' = sin(b·x) + d·cos(b·y).
-  // Successive points jump all over the shape, so there is no line to trace. In Ambient the
-  // orbit forms like settling dust, holds, then crumbles away speck by speck in the order it
-  // arrived. Remaining specks stay at full brightness, so it breaks up rather than fading, and
-  // the loop starts and ends empty, so it joins seamlessly.
+  // Unlike Lorenz, successive points jump all over the shape, so there is no line to trace.
+  // In Ambient the orbit "develops": points settle in like dust over 80% of the loop until
+  // the filaments emerge, hold, then fade, so the loop starts and ends empty. The parameters
+  // stay fixed so the shape doesn't wobble while it forms.
+  const cliffordParams = (base, amp, T) => [
+    base[0] + amp * Math.cos(T), base[1] + amp * Math.sin(T),
+    base[2] + amp * 0.5 * Math.sin(T + 1), base[3] + amp * 0.5 * Math.cos(T + 2),
+  ];
 
   // Most random parameters collapse to a few points or a loop. Search seeded candidates and
-  // keep the one whose orbit covers the most of the plane; also measure its real bounds.
+  // keep the one whose orbit covers the most of the plane at its worst point in the loop,
+  // so the shape never collapses mid-animation. Also measures its real bounds for framing.
   function pickClifford() {
-    if (P.cliffPickKey === `${S.seed}`) return P.cliffPick;
+    const key = `${S.seed}`;
+    if (P.cliffPickKey === key) return P.cliffPick;
     const rng = mulberry32(S.seed * 97 + 3);
-    const STEPS = 4000, GRID = 64;
+    const amp = 0;
+    const PHASES = 1, STEPS = 4000, GRID = 64;
     let best = null, bestScore = -1;
     for (let tries = 0; tries < 150 && bestScore < 900; tries++) {
-      const [a, b, c, d] = [rng() * 4 - 2, rng() * 4 - 2, rng() * 3 - 1.5, rng() * 3 - 1.5];
-      const seen = new Uint8Array(GRID * GRID);
-      let x = 0.1, y = 0.1, cov = 0, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-      for (let i = 0; i < STEPS; i++) {
-        const nx = Math.sin(a * y) + c * Math.cos(a * x);
-        y = Math.sin(b * x) + d * Math.cos(b * y);
-        x = nx;
-        if (i < 50) continue;
-        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
-        const k = Math.floor(((y + 2.5) / 5) * GRID) * GRID + Math.floor(((x + 2.5) / 5) * GRID);
-        if (!seen[k]) { seen[k] = 1; cov++; }
+      const base = [rng() * 4 - 2, rng() * 4 - 2, rng() * 3 - 1.5, rng() * 3 - 1.5];
+      let minCov = Infinity, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (let ph = 0; ph < PHASES && minCov > bestScore; ph++) {
+        const [a, b, c, d] = cliffordParams(base, amp, (ph / PHASES) * TAU);
+        const seen = new Uint8Array(GRID * GRID);
+        let x = 0.1, y = 0.1, cov = 0;
+        for (let i = 0; i < STEPS; i++) {
+          const nx = Math.sin(a * y) + c * Math.cos(a * x);
+          y = Math.sin(b * x) + d * Math.cos(b * y);
+          x = nx;
+          if (i < 50) continue;
+          if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+          const k = Math.floor(((y + 2.5) / 5) * GRID) * GRID + Math.floor(((x + 2.5) / 5) * GRID);
+          if (!seen[k]) { seen[k] = 1; cov++; }
+        }
+        minCov = Math.min(minCov, cov);
       }
-      if (cov > bestScore) { bestScore = cov; best = { p: [a, b, c, d], cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, sx: x1 - x0, sy: y1 - y0 }; }
+      if (minCov > bestScore) { bestScore = minCov; best = { base, amp, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, sx: x1 - x0, sy: y1 - y0 }; }
     }
     P.cliffPick = best;
-    P.cliffPickKey = `${S.seed}`;
+    P.cliffPickKey = key;
     return best;
-  }
-
-  // The orbit itself, centred on its bounds; cached per seed and point count.
-  function cliffordOrbit() {
-    const key = `${S.seed}:${P.cx}`;
-    if (P.cliffOrbitKey === key) return P.cliffOrbit;
-    const pick = pickClifford();
-    const [a, b, c, d] = pick.p;
-    const M = 60000 + P.cx * 60000;
-    const X = new Float32Array(M), Y = new Float32Array(M);
-    let x = 0.1, y = 0.1;
-    for (let i = 0; i < M + 100; i++) {
-      const nx = Math.sin(a * y) + c * Math.cos(a * x);
-      y = Math.sin(b * x) + d * Math.cos(b * y);
-      x = nx;
-      if (i >= 100) { X[i - 100] = x - pick.cx; Y[i - 100] = y - pick.cy; } // skip the run-in
-    }
-    P.cliffOrbit = { X, Y, M, pick, refKey: "" };
-    P.cliffOrbitKey = key;
-    return P.cliffOrbit;
   }
 
   function buildClifford(T, cols, rows, u0, v0, du) {
     const drawing = S.mode === "ambient";
     const key = `${drawing ? T.toFixed(5) : "full"}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
     if (P.cliffKey === key) return;
-    const O = cliffordOrbit(), { X, Y, M, pick } = O;
-    const fit = Math.min((2 * P.ax) / pick.sx, (2 * P.ay) / pick.sy) * 0.88 * P.f; // Scale zooms
-    const bin = (x, y) => {
-      const ix = Math.round((x * fit - u0) / du), iy = Math.round((y * fit - v0) / du);
-      return ix >= 0 && iy >= 0 && ix < cols && iy < rows ? iy * cols + ix : -1;
-    };
-    // Brightness reference: the log density of the whole orbit, once per framing.
-    const refKey = `${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}:${fit.toFixed(5)}`;
-    if (O.refKey !== refKey) {
-      O.cells = new Int32Array(M);
-      const full = new Float32Array(cols * rows);
-      for (let i = 0; i < M; i++) { O.cells[i] = bin(X[i], Y[i]); if (O.cells[i] >= 0) full[O.cells[i]]++; }
-      let max = 0;
-      for (let i = 0; i < full.length; i++) if (full[i] > max) max = full[i];
-      O.ref = Math.log1p(max);
-      O.refKey = refKey;
-    }
-    // Visible specks are orbit points [tail, head). Form over 0–55% of the loop (squared, so the
-    // sparse dust lasts), hold, then crumble from 65% in arrival order.
-    const tau = drawing ? T / TAU : 0.6;
-    const head = Math.floor(M * smooth(0, 0.55, tau) ** 2);
-    const tail = Math.floor(M * smooth(0.65, 1, tau) ** 0.5);
+    const pick = pickClifford();
+    const [a, b, c, d] = cliffordParams(pick.base, pick.amp, drawing ? T : 0);
+    // Fit the measured bounds inside the frame, then apply Scale as zoom.
+    const fit = Math.min((2 * P.ax) / pick.sx, (2 * P.ay) / pick.sy) * 0.88 * P.f;
+    const tau = drawing ? T / TAU : 1;
+    // Squared so the sparse "dust" phase lasts longer before the shape fills in; starts at 0
+    // so the first frame matches the empty last frame.
+    const grow = drawing ? smooth(0, 0.8, tau) ** 2 : 1;
+    const fade = drawing ? 1 - smooth(0.9, 1, tau) : 1;
+    const full = 60000 + P.cx * 60000, N = Math.floor(full * grow);
     const hist = new Float32Array(cols * rows);
-    for (let i = tail; i < head; i++) { const k = O.cells[i]; if (k >= 0) hist[k]++; }
-    // Scale up to whole-orbit counts so specks show at their finished brightness throughout.
-    const scale = M / Math.max(head - tail, M * 1e-3);
-    for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(Math.min(1, Math.log1p(hist[i] * scale) / O.ref), 0.85);
+    let x = 0.1, y = 0.1;
+    for (let i = 0; i < N + 100; i++) {
+      const nx = Math.sin(a * y) + c * Math.cos(a * x);
+      y = Math.sin(b * x) + d * Math.cos(b * y);
+      x = nx;
+      if (i < 100) continue; // skip the run-in before the orbit settles
+      const ix = Math.round(((x - pick.cx) * fit - u0) / du), iy = Math.round(((y - pick.cy) * fit - v0) / du);
+      if (ix >= 0 && iy >= 0 && ix < cols && iy < rows) hist[iy * cols + ix]++;
+    }
+    // Scale counts up to what the finished shape would hold, so early specks show at their
+    // eventual brightness and the shape fills in rather than brightening. Log scale keeps faint
+    // filaments visible next to dense cores.
+    let max = 0;
+    const g = Math.max(grow, 1e-3);
+    for (let i = 0; i < hist.length; i++) { hist[i] = Math.log1p(hist[i] / g); if (hist[i] > max) max = hist[i]; }
+    if (max > 0) for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(hist[i] / max, 0.85) * fade;
     P.cliff = { val: hist, cols, rows, u0, v0, du };
     P.cliffKey = key;
   }
