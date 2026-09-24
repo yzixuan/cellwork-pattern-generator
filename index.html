@@ -891,7 +891,7 @@
 
   // Motion
   g = group("Motion");
-  row(g, "Mode", seg("mode", [["off", "Off"], ["ambient", "On"]], "Motion mode"));
+  row(g, "Animation", seg("mode", [["off", "Off"], ["ambient", "On"]], "Animation"));
   const loopRow = row(g, "Loop", slider("loop", 2, 12, 0.5, "s"), "c-loop");
 
   // Appearance
@@ -1015,7 +1015,7 @@
     bDownload.disabled = busy || blocked;
     const clip = `${S.loop}s seamless loop`;
     hint.innerHTML = blocked
-      ? `Turn on Motion to export ${FILE_TYPES[S.fileType].label}, or pick PNG or SVG.`
+      ? `Turn on Animation to export ${FILE_TYPES[S.fileType].label}, or pick PNG or SVG.`
       : {
           png: `Best for web and social stills.`,
           svg: `Vector, for print or editing in design tools. Grain isn't included.`,
