@@ -1,4 +1,4 @@
-# Cellwork
+# Cellwork Pattern Generator
 
 A generative pattern generator for publishing assets. Pick a pattern, tune it, and export it as a still or a seamless loop.
 
