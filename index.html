@@ -180,12 +180,17 @@
     mode: "ambient", loop: 6,
     tone: "dark", color: "#B18CFF", opacity: 95, grain: 16,
     textOn: false, caption: "Category", headline: "Your headline here", subtitle: "A short line of supporting text", showCaption: true, showHeadline: true, showSubtitle: false, textFont: "sans", textPos: "bl", textSize: 72,
-    format: "16:9", fileType: "png", pngScale: 1, filename: "",
+    format: "16:9", fileType: "mp4", fileTypeChosen: false, stillAuto: false, lastMotionType: "mp4", pngScale: 1, filename: "",
   };
 
   let S = { ...DEFAULTS };
   try { Object.assign(S, JSON.parse(localStorage.getItem("cellwork-v1") || "{}")); } catch (e) {}
   if (!["png", "svg", "mp4", "gif"].includes(S.fileType)) S.fileType = "png";
+  // File type follows Animation until someone picks one: Video when it's on, PNG when it's off.
+  if (!S.fileTypeChosen) S.fileType = S.mode === "off" ? "png" : "mp4";
+  if (S.mode === "off" && (S.fileType === "mp4" || S.fileType === "gif")) {
+    S.lastMotionType = S.fileType; S.fileType = "png"; S.stillAuto = true;
+  }
   if (S.mode !== "off") S.mode = "ambient"; // Reveal was removed; a saved Reveal becomes On
   // Move untouched copies of the old default text onto the new defaults.
   if (S.caption === "Side project") S.caption = DEFAULTS.caption;
@@ -1006,6 +1011,17 @@
     if (P_KEYS.has(key)) buildP();
     if (COLOUR_KEYS.has(key)) buildColours();
     if (key === "format") fitView();
+    if (key === "fileType") { S.fileTypeChosen = true; S.stillAuto = false; }
+    if (key === "mode") {
+      // Turning Animation off swaps Video/GIF for PNG; turning it back on restores the motion
+      // format, unless a still format was picked on purpose.
+      if (value === "off" && FILE_TYPES[S.fileType].motion) {
+        S.lastMotionType = S.fileType; S.fileType = "png"; S.stillAuto = true;
+      } else if (value !== "off" && (S.stillAuto || !S.fileTypeChosen)) {
+        S.fileType = S.stillAuto ? S.lastMotionType || "mp4" : "mp4"; S.stillAuto = false;
+      }
+      binders.fileType?.();
+    }
     if (key === "textFont") loadTextFont();
     if ((key === "generator" || key === "seed") && (!S.filename || S.filename === prevAuto)) S.filename = "";
     binders[key]?.();
