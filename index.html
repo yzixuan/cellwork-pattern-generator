@@ -178,13 +178,16 @@
     shape: "dot", spacing: 16, dotSize: 90, mapping: "both", shades: 5, threshold: 8, texture: 10,
     mode: "ambient", loop: 6,
     tone: "dark", color: "#B18CFF", opacity: 95, grain: 16,
-    textOn: false, caption: "Side project", headline: "Generative Art, After Hours", textPos: "bl", textSize: 72,
+    textOn: false, caption: "Category", headline: "Your headline here", textPos: "bl", textSize: 72,
     format: "16:9", fileType: "png", pngScale: 1, filename: "",
   };
 
   let S = { ...DEFAULTS };
   try { Object.assign(S, JSON.parse(localStorage.getItem("cellwork-v1") || "{}")); } catch (e) {}
   if (!["png", "svg", "mp4", "gif"].includes(S.fileType)) S.fileType = "png";
+  // Move untouched copies of the old default text onto the new defaults.
+  if (S.caption === "Side project") S.caption = DEFAULTS.caption;
+  if (S.headline === "Generative Art, After Hours") S.headline = DEFAULTS.headline;
   // "Value sets" is hidden for now, so don't leave anyone stuck on a choice they can't see.
   S.mapping = "both";
 
@@ -918,8 +921,8 @@
   binders.textOn();
   const textGroup = group("Text", textToggle);
   const textRows = [
-    row(textGroup, "Eyebrow", textField("caption", "Side project"), "c-caption"),
-    row(textGroup, "Headline", textField("headline", "Your headline"), "c-headline"),
+    row(textGroup, "Eyebrow", textField("caption", "Category"), "c-caption"),
+    row(textGroup, "Headline", textField("headline", "Your headline here"), "c-headline"),
     row(textGroup, "Position", seg("textPos", [["tl", "Top"], ["center", "Centre"], ["bl", "Bottom"]], "Text position")),
     row(textGroup, "Size", slider("textSize", 24, 160, 2, "px"), "c-textSize"),
   ];
