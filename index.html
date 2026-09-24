@@ -1039,7 +1039,7 @@
       ? `Turn on Animation to export ${FILE_TYPES[S.fileType].label}, or pick PNG or SVG.`
       : {
           mp4: `${clip}, 1080p. The smallest and smoothest option for motion.`,
-          gif: `${clip}, 720px. Use only where video isn't accepted; set Grain to 0 for a smaller file.`,
+          gif: `${clip}, 720px.`,
         }[S.fileType] || ""; // stills need no note
     hint.hidden = !hint.innerHTML;
   }
