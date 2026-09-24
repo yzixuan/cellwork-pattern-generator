@@ -355,6 +355,7 @@
     },
     clifford: {
       name: "Clifford Attractor",
+      noDistortion: true,
       spacing: 6, // fine cells show the speckle and filaments
       fn(u, v, T, P) {
         const A = P.cliff;
@@ -506,13 +507,10 @@
   }
 
   // Clifford attractor:  x' = sin(a·y) + c·cos(a·x),  y' = sin(b·x) + d·cos(b·y).
-  // Successive points jump all over the shape, so there is no line to trace. The orbit is one
-  // long list treated as a ring; in Ambient a window over 40% of it slides once round the ring
-  // per loop. New specks settle in as the oldest ones leave, so the shape stays visible and
-  // shimmers, and after one loop the window is back where it started: a seamless loop.
-  // Distortion sways the whole shape (rotating it); changing the parameters instead would
-  // scramble every speck between frames, since the map is chaotic.
-  const CLIFF_WINDOW = 0.4;
+  // Successive points jump all over the shape, so there is no line to trace. In Ambient the
+  // orbit forms like settling dust, holds, then crumbles away speck by speck in the order it
+  // arrived. Remaining specks stay at full brightness, so it breaks up rather than fading, and
+  // the loop starts and ends empty, so it joins seamlessly.
 
   // Most random parameters collapse to a few points or a loop. Search seeded candidates and
   // keep the one whose orbit covers the most of the plane; also measure its real bounds.
@@ -549,17 +547,14 @@
     const [a, b, c, d] = pick.p;
     const M = 60000 + P.cx * 60000;
     const X = new Float32Array(M), Y = new Float32Array(M);
-    let x = 0.1, y = 0.1, r = 0;
+    let x = 0.1, y = 0.1;
     for (let i = 0; i < M + 100; i++) {
       const nx = Math.sin(a * y) + c * Math.cos(a * x);
       y = Math.sin(b * x) + d * Math.cos(b * y);
       x = nx;
-      if (i < 100) continue; // skip the run-in
-      X[i - 100] = x - pick.cx; Y[i - 100] = y - pick.cy;
-      r = Math.max(r, Math.hypot(X[i - 100], Y[i - 100]));
+      if (i >= 100) { X[i - 100] = x - pick.cx; Y[i - 100] = y - pick.cy; } // skip the run-in
     }
-    // r = farthest point from the centre: the shape never leaves that circle while it sways.
-    P.cliffOrbit = { X, Y, M, pick, r, refKey: "" };
+    P.cliffOrbit = { X, Y, M, pick, refKey: "" };
     P.cliffOrbitKey = key;
     return P.cliffOrbit;
   }
@@ -569,12 +564,7 @@
     const key = `${drawing ? T.toFixed(5) : "full"}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
     if (P.cliffKey === key) return;
     const O = cliffordOrbit(), { X, Y, M, pick } = O;
-    // Fit the shape inside the frame (with room to sway when Distortion is on), then apply Scale.
-    const sway = (P.dist / 100) * 0.35;
-    // Box of the shape turned to the full sway angle, capped by the circle it can't leave.
-    const cs = Math.cos(sway), sn = Math.sin(sway);
-    const w = Math.min(2 * O.r, pick.sx * cs + pick.sy * sn), h = Math.min(2 * O.r, pick.sy * cs + pick.sx * sn);
-    const fit = Math.min((2 * P.ax) / w, (2 * P.ay) / h) * 0.88 * P.f;
+    const fit = Math.min((2 * P.ax) / pick.sx, (2 * P.ay) / pick.sy) * 0.88 * P.f; // Scale zooms
     const bin = (x, y) => {
       const ix = Math.round((x * fit - u0) / du), iy = Math.round((y * fit - v0) / du);
       return ix >= 0 && iy >= 0 && ix < cols && iy < rows ? iy * cols + ix : -1;
@@ -582,29 +572,24 @@
     // Brightness reference: the log density of the whole orbit, once per framing.
     const refKey = `${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}:${fit.toFixed(5)}`;
     if (O.refKey !== refKey) {
+      O.cells = new Int32Array(M);
       const full = new Float32Array(cols * rows);
-      for (let i = 0; i < M; i++) { const k = bin(X[i], Y[i]); if (k >= 0) full[k]++; }
+      for (let i = 0; i < M; i++) { O.cells[i] = bin(X[i], Y[i]); if (O.cells[i] >= 0) full[O.cells[i]]++; }
       let max = 0;
       for (let i = 0; i < full.length; i++) if (full[i] > max) max = full[i];
       O.ref = Math.log1p(max);
       O.refKey = refKey;
     }
+    // Visible specks are orbit points [tail, head). Form over 0–55% of the loop (squared, so the
+    // sparse dust lasts), hold, then crumble from 65% in arrival order.
+    const tau = drawing ? T / TAU : 0.6;
+    const head = Math.floor(M * smooth(0, 0.55, tau) ** 2);
+    const tail = Math.floor(M * smooth(0.65, 1, tau) ** 0.5);
     const hist = new Float32Array(cols * rows);
-    if (drawing) {
-      const rot = sway * Math.sin(T), cr = Math.cos(rot), sr = Math.sin(rot);
-      const W = Math.floor(M * CLIFF_WINDOW), start = Math.floor((T / TAU) * M);
-      for (let n = 0; n < W; n++) {
-        const i = (start + n) % M;
-        const k = bin(X[i] * cr - Y[i] * sr, X[i] * sr + Y[i] * cr);
-        if (k >= 0) hist[k] += Math.sin((Math.PI * (n + 0.5)) / W); // soft in, soft out
-      }
-      // Scale the window's counts up to the whole orbit (2/π is the mean of the sine weight).
-      const scale = 1 / (CLIFF_WINDOW * (2 / Math.PI));
-      for (let i = 0; i < hist.length; i++) hist[i] *= scale;
-    } else {
-      for (let i = 0; i < M; i++) { const k = bin(X[i], Y[i]); if (k >= 0) hist[k]++; }
-    }
-    for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(Math.min(1, Math.log1p(hist[i]) / O.ref), 0.85);
+    for (let i = tail; i < head; i++) { const k = O.cells[i]; if (k >= 0) hist[k]++; }
+    // Scale up to whole-orbit counts so specks show at their finished brightness throughout.
+    const scale = M / Math.max(head - tail, M * 1e-3);
+    for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(Math.min(1, Math.log1p(hist[i] * scale) / O.ref), 0.85);
     P.cliff = { val: hist, cols, rows, u0, v0, du };
     P.cliffKey = key;
   }
@@ -900,7 +885,7 @@
   row(g, "Seed", h("div", { class: "combo" }, [seedInput, dice]), "c-seed");
   row(g, "Scale", slider("scale", 40, 300, 5, "%"), "c-scale");
   row(g, "Detail", slider("complexity", 1, 6, 1), "c-complexity");
-  row(g, "Distortion", slider("distortion", 0, 100, 1), "c-distortion");
+  const distRow = row(g, "Distortion", slider("distortion", 0, 100, 1), "c-distortion");
 
   // Cells
   g = group("Cells");
@@ -1011,6 +996,7 @@
     loopRow.hidden = S.mode !== "ambient";
     sizeRow.querySelector("label").textContent = S.shape === "glyph" ? "Glyph size" : S.shape === "dot" ? "Dot size" : "Cell size";
     mapRow.hidden = S.shape === "glyph";
+    distRow.hidden = !!GENS[S.generator].noDistortion;
     textRows.forEach((r) => (r.hidden = !S.textOn));
     nameInput.placeholder = autoName();
     if (document.activeElement !== nameInput) nameInput.value = S.filename;
