@@ -660,16 +660,16 @@
 
   /* ---------- text block ---------- */
   const measure = document.createElement("canvas").getContext("2d");
-  // Headline and subtitle fonts. The label always stays in Geist Mono.
+  // Text fonts: the label, headline and subtitle all use the chosen face.
   const TEXT_FONTS = {
-    sans: { family: "Geist", css: "Geist, ui-sans-serif, system-ui, sans-serif", head: 600, track: -0.02 },
-    mono: { family: "Geist Mono", css: '"Geist Mono", ui-monospace, monospace', head: 500, track: -0.01 },
-    pixel: { family: "Pixelify Sans", css: '"Pixelify Sans", "Geist Mono", ui-monospace, monospace', head: 600, track: 0 },
+    sans: { family: "Geist", css: "Geist, ui-sans-serif, system-ui, sans-serif", head: 600, label: 500, track: -0.02 },
+    mono: { family: "Geist Mono", css: '"Geist Mono", ui-monospace, monospace', head: 500, label: 500, track: -0.01 },
+    pixel: { family: "Pixelify Sans", css: '"Pixelify Sans", "Geist Mono", ui-monospace, monospace', head: 600, label: 400, track: 0 },
   };
   // Canvas text doesn't trigger web-font loading, so load the chosen face before drawing with it.
   function loadTextFont() {
     const F = TEXT_FONTS[S.textFont] || TEXT_FONTS.sans;
-    return Promise.all([`${F.head} 40px "${F.family}"`, `400 40px "${F.family}"`].map((f) => document.fonts.load(f)))
+    return Promise.all([F.head, F.label, 400].map((w) => document.fonts.load(`${w} 40px "${F.family}"`)))
       .then(() => { dirty = true; }, () => {});
   }
 
@@ -679,7 +679,7 @@
     const hs = S.textSize * s, cs = Math.max(9 * s, hs * 0.26), ss = Math.max(10 * s, hs * 0.36);
     const F = TEXT_FONTS[S.textFont] || TEXT_FONTS.sans;
     const headFont = `${F.head} ${hs}px ${F.css}`;
-    const capFont = `500 ${cs}px "Geist Mono", ui-monospace, monospace`;
+    const capFont = `${F.label} ${cs}px ${F.css}`;
     const subFont = `400 ${ss}px ${F.css}`;
     const maxW = W * (S.textPos === "center" ? 0.8 : 0.62);
     const wrap = (text, font) => {
@@ -703,7 +703,7 @@
     const align = S.textPos === "center" ? "center" : "left";
     const x = align === "center" ? W / 2 : pad;
     const items = [];
-    if (cap) items.push({ text: cap, x, y: top + cs, font: capFont, family: "Geist Mono", size: cs, weight: 500, spacing: cs * 0.14, align, alpha: 0.7 });
+    if (cap) items.push({ text: cap, x, y: top + cs, font: capFont, family: F.family, size: cs, weight: F.label, spacing: cs * 0.14, align, alpha: 0.7 });
     lines.forEach((t, i) => items.push({ text: t, x, y: top + gap + lh * (i + 1) - hs * 0.2, font: headFont, family: F.family, size: hs, weight: F.head, spacing: hs * F.track, align, alpha: 1 }));
     const subTop = top + gap + lines.length * lh + subGap;
     subLines.forEach((t, i) => items.push({ text: t, x, y: subTop + slh * (i + 1) - ss * 0.3, font: subFont, family: F.family, size: ss, weight: 400, spacing: 0, align, alpha: 0.72 }));
@@ -951,7 +951,7 @@
     row(textGroup, "Label", withEye("showCaption", "label", textField("caption", "Category")), "c-caption"),
     row(textGroup, "Headline", withEye("showHeadline", "headline", textField("headline", "Your headline here")), "c-headline"),
     row(textGroup, "Subtitle", withEye("showSubtitle", "subtitle", textField("subtitle", "Optional supporting line")), "c-subtitle"),
-    row(textGroup, "Font", seg("textFont", [["sans", "Sans"], ["mono", "Mono"], ["pixel", "Pixel"]], "Headline font")),
+    row(textGroup, "Font", seg("textFont", [["sans", "Sans"], ["mono", "Mono"], ["pixel", "Pixel"]], "Text font")),
     row(textGroup, "Position", seg("textPos", [["tl", "Top"], ["center", "Centre"], ["bl", "Bottom"]], "Text position")),
     row(textGroup, "Size", slider("textSize", 24, 160, 2, "px"), "c-textSize"),
   ];
