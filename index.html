@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cellwork</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ground: #0c0b0e;
+    --panel: #131116;
+    --raised: #1b1920;
+    --raised-hi: #242129;
+    --line: #29262e;
+    --text: #edeaf1;
+    --muted: #8e8897;
+    --faint: #5f5a67;
+    --accent: #c8b4ff;
+    --danger: #ff8a7a;
+    --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--ground); color: var(--text); font: 14px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app { display: grid; grid-template-columns: 340px minmax(0, 1fr); height: 100%; }
+
+  /* Sidebar */
+  .panel { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; overscroll-behavior: contain; }
+  .brand { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 18px 18px; border-bottom: 1px solid var(--line); }
+  .brand h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+  .icon-btn { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 7px; border: 1px solid var(--line); background: var(--raised); color: var(--muted); }
+  .icon-btn:hover { color: var(--text); background: var(--raised-hi); }
+  .icon-btn svg { width: 15px; height: 15px; }
+
+  .group { padding: 16px 18px 18px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
+  .group-head { display: flex; align-items: center; justify-content: space-between; min-height: 22px; margin-bottom: 4px; }
+  .group-head h2 { margin: 0; font: 500 11px/1 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--text); }
+  .row { display: grid; grid-template-columns: 86px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 34px; }
+  .row > label, .row > .label { font: 12px var(--mono); color: var(--muted); }
+  .row.stack { grid-template-columns: 1fr; }
+
+  .slider { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px 0 12px; border-radius: 7px; background: var(--raised); }
+  .slider output { font: 12px var(--mono); color: var(--muted); min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 18px; background: transparent; margin: 0; --p: 50%; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--text) var(--p), var(--line) var(--p)); }
+  input[type="range"]::-moz-range-track { height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--text) var(--p), var(--line) var(--p)); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -5px; border-radius: 50%; background: var(--text); border: 0; box-shadow: 0 0 0 3px var(--raised); }
+  input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 0; box-shadow: 0 0 0 3px var(--raised); }
+  input[type="range"]:focus-visible { outline: none; }
+  input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--raised), 0 0 0 5px var(--accent); }
+
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 7px; background: var(--raised); }
+  .seg button { flex: 1; min-width: 0; height: 28px; padding: 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--muted); font: 12px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg button:hover { color: var(--text); }
+  .seg button svg { width: 14px; height: 14px; vertical-align: -2px; }
+  .seg button[aria-pressed="true"] { background: var(--ground); color: var(--text); border-color: var(--line); }
+
+  .field, select.field { width: 100%; height: 34px; padding: 0 12px; border-radius: 7px; border: 1px solid transparent; background: var(--raised); font: 13px var(--mono); }
+  .field:focus { border-color: var(--line); }
+  select.field { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23edeaf1' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; }
+  .combo { display: flex; gap: 6px; }
+  .combo .field { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
+
+  .swatches { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 9px; border-radius: 7px; background: var(--raised); }
+  .swatch { width: 20px; height: 20px; flex: none; border-radius: 50%; border: 0; padding: 0; background: var(--c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+  .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--raised), 0 0 0 3.5px var(--text); }
+  .swatch-custom { position: relative; width: 20px; height: 20px; flex: none; border-radius: 50%; background: conic-gradient(#ff7a5c, #ffd166, #3ecf8e, #4cc9f0, #b18cff, #ff7a5c); overflow: hidden; }
+  .swatch-custom[data-on="true"] { box-shadow: 0 0 0 2px var(--raised), 0 0 0 3.5px var(--text); }
+  .swatch-custom input { position: absolute; inset: -6px; width: 32px; height: 32px; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+
+  .toggle { height: 24px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--raised); color: var(--muted); font: 11.5px var(--mono); }
+  .toggle[aria-pressed="true"] { color: var(--ground); background: var(--text); border-color: var(--text); }
+
+  .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .btn { height: 38px; border-radius: 7px; border: 1px solid var(--line); background: var(--raised); font-weight: 500; font-size: 13.5px; }
+  .btn:hover:not(:disabled) { background: var(--raised-hi); }
+  .btn.primary { background: var(--text); color: var(--ground); border-color: var(--text); }
+  .btn.primary:hover:not(:disabled) { background: #fff; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn small { font: 11px var(--mono); color: inherit; opacity: .6; margin-left: 4px; }
+  .hint { margin: 2px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .hint b { color: var(--text); font-weight: 500; }
+  .progress { display: grid; gap: 6px; }
+  .progress-track { height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .1s linear; }
+  .progress-label { font: 11.5px var(--mono); color: var(--muted); }
+
+  /* Stage */
+  .stage { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; padding: 28px 32px 18px; gap: 14px; }
+  .frame { position: relative; display: grid; place-items: center; min-height: 0; }
+  #view { display: block; max-width: 100%; border-radius: 3px; box-shadow: 0 0 0 1px var(--line), 0 30px 80px rgba(0,0,0,.45); }
+  .stage-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  #caption { font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .stage-actions { display: flex; gap: 6px; }
+  .ghost { height: 28px; padding: 0 11px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: 11.5px var(--mono); display: inline-flex; align-items: center; gap: 6px; }
+  .ghost:hover { color: var(--text); background: var(--raised); }
+  .ghost svg { width: 12px; height: 12px; }
+
+  #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 8px); padding: 9px 14px; border-radius: 8px; background: var(--text); color: var(--ground); font-size: 13px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 10; max-width: calc(100% - 32px); }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (max-width: 860px) {
+    html, body { height: auto; }
+    .app { display: flex; flex-direction: column-reverse; height: auto; }
+    .stage { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2; height: 46vh; padding: 16px 16px 10px; background: var(--ground); border-bottom: 1px solid var(--line); }
+    .panel { border-right: 0; overflow: visible; }
+    .brand, .group { padding-left: 16px; padding-right: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #toast, .progress-fill { transition: none; }
+  }
+</style>
+
+<div class="app">
+  <aside class="panel" aria-label="Pattern settings">
+    <header class="brand">
+      <div>
+        <h1>Cellwork</h1>
+        <p>Generative patterns for publishing assets.</p>
+      </div>
+      <button class="icon-btn" id="shuffle" type="button" title="Shuffle settings" aria-label="Shuffle settings">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h2.5c1.6 0 2.6.8 3.5 2.2l1 1.6c.9 1.4 1.9 2.2 3.5 2.2H14"/><path d="M2 12h2.5c1.2 0 2-.4 2.7-1.2"/><path d="M9.3 5.2C10 4.4 10.8 4 12 4h2"/><path d="M12.5 2.5 14 4l-1.5 1.5"/><path d="M12.5 8.5 14 10l-1.5 1.5"/></svg>
+      </button>
+    </header>
+    <div id="controls"></div>
+  </aside>
+
+  <main class="stage">
+    <div class="frame" id="frame"><canvas id="view" aria-label="Pattern preview"></canvas></div>
+    <div class="stage-bar">
+      <span id="caption"></span>
+      <div class="stage-actions">
+        <button class="ghost" id="replay" type="button">
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 6a4 4 0 1 0 1.2-2.85"/><path d="M2 1.8v2.4h2.4"/></svg>Replay
+        </button>
+        <button class="ghost" id="playpause" type="button"></button>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  "use strict";
+  const TAU = Math.PI * 2;
+  const REVEAL_SPAN = 1.6;           // seconds over which cells start appearing
+  const REVEAL_POP = 0.45;           // seconds each cell takes to grow in
+  const REVEAL_TOTAL = REVEAL_SPAN + REVEAL_POP;
+  const GIF_URL = "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js";
+  const MUXER_URL = "https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.mjs";
+
+  const FORMATS = {
+    "16:9": { w: 1920, h: 1080, label: "16:9 · 1920 × 1080" },
+    "1:1": { w: 1080, h: 1080, label: "Square · 1080 × 1080" },
+    "4:5": { w: 1080, h: 1350, label: "Portrait 4:5 · 1080 × 1350" },
+    "9:16": { w: 1080, h: 1920, label: "Story 9:16 · 1080 × 1920" },
+    og: { w: 1200, h: 630, label: "Link preview · 1200 × 630" },
+    banner: { w: 1500, h: 500, label: "Banner 3:1 · 1500 × 500" },
+  };
+  const SWATCHES = [
+    ["#B18CFF", "Lavender"], ["#1EFFB0", "Mint"], ["#D9A77E", "Sand"],
+    ["#4C9DFF", "Sky blue"], ["#EDEAF1", "Chalk"], ["#FF7A5C", "Coral"],
+  ];
+  const GLYPHS = ".:-=+*#%@";
+
+  const DEFAULTS = {
+    generator: "waves", seed: 310, scale: 100, complexity: 3, distortion: 50,
+    shape: "dot", spacing: 16, dotSize: 90, mapping: "both", shades: 5, threshold: 8, texture: 10,
+    mode: "ambient", loop: 6,
+    tone: "dark", color: "#B18CFF", opacity: 95, grain: 16,
+    textOn: false, caption: "Side project", headline: "Generative Art, After Hours", textPos: "bl", textSize: 72,
+    format: "16:9", pngScale: 1, filename: "",
+  };
+
+  let S = { ...DEFAULTS };
+  try { Object.assign(S, JSON.parse(localStorage.getItem("cellwork-v1") || "{}")); } catch (e) {}
+
+  /* ---------- maths helpers ---------- */
+  function mulberry32(a) {
+    return () => {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function hash(x, y, z) {
+    let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 2147483647);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+  const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+  const easeOutBack = (p) => { const c = 1.7; const q = p - 1; return 1 + (c + 1) * q * q * q + c * q * q; };
+
+  // Seeded 2D value noise and fractal sum, both 0..1.
+  function makeNoise(seed) {
+    const rand = mulberry32(seed * 7919 + 17);
+    const perm = new Uint8Array(512);
+    const base = Array.from({ length: 256 }, (_, i) => i);
+    for (let i = 255; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [base[i], base[j]] = [base[j], base[i]]; }
+    for (let i = 0; i < 512; i++) perm[i] = base[i & 255];
+    const vals = Float32Array.from({ length: 256 }, rand);
+    const noise = (x, y) => {
+      const xi = Math.floor(x), yi = Math.floor(y);
+      const xf = x - xi, yf = y - yi;
+      const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+      const X = xi & 255, Y = yi & 255;
+      const a = vals[perm[perm[X] + Y]], b = vals[perm[perm[X + 1] + Y]];
+      const c = vals[perm[perm[X] + Y + 1]], d = vals[perm[perm[X + 1] + Y + 1]];
+      return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+    };
+    const fbm = (x, y, oct) => {
+      let sum = 0, amp = 0.5, norm = 0;
+      for (let o = 0; o < oct; o++) { sum += amp * noise(x, y); norm += amp; x = x * 2.03 + 11.1; y = y * 2.03 + 7.3; amp *= 0.5; }
+      return sum / norm;
+    };
+    return { noise, fbm };
+  }
+
+  /* ---------- generators ----------
+     Each returns a value 0..1 for a point (u, v) in a space where the frame's shorter side
+     spans -1..1. T is the loop phase in radians (0..2π); every motion uses whole multiples
+     of T so exported loops repeat seamlessly. */
+  const GENS = {
+    waves: {
+      name: "Waves",
+      fn(u, v, T, P) {
+        const f = P.f, sway = P.dist / 50;
+        const centre = sway * (0.18 * Math.sin(2.2 * u * f - T + P.r[0] * TAU) + 0.06 * Math.sin(5.1 * u * f + 2 * T + P.r[1] * TAU));
+        const d = Math.abs(v - centre) * (1 + 0.6 * u * u);
+        const bands = 1.5 + P.cx * 1.2;
+        const wave = 0.5 + 0.5 * Math.sin(bands * Math.PI * d * f - 2 * T);
+        const beat = 0.6 + 0.4 * Math.sin(1.4 * u * f + T - 2 * d + P.r[2] * TAU);
+        const env = 1 - smooth(0.55, 1.2, d);
+        return Math.pow(wave * beat * env, 0.7);
+      },
+    },
+    ripples: {
+      name: "Ripples",
+      fn(u, v, T, P) {
+        let s = 0;
+        const n = P.cx, wob = (P.dist / 100) * 0.35;
+        for (let i = 0; i < n; i++) {
+          const src = P.src[i];
+          const sx = (src[0] * 2 - 1) * 0.8 * P.ax, sy = (src[1] * 2 - 1) * 0.7 * P.ay;
+          let d = Math.hypot(u - sx, v - sy);
+          if (wob) d += wob * (P.noise(u * 1.6 + Math.cos(T) * 0.6, v * 1.6 + Math.sin(T) * 0.6) - 0.5);
+          s += 0.5 + 0.5 * Math.sin(d * 9 * P.f - 2 * T + src[2]);
+        }
+        return Math.pow(s / n, 1.2);
+      },
+    },
+    noise: {
+      name: "Noise Field",
+      fn(u, v, T, P) {
+        const f = P.f * 1.4;
+        let x = u * f + Math.cos(T) * 0.7, y = v * f + Math.sin(T) * 0.7;
+        if (P.dist > 0) {
+          const w = (P.dist / 100) * 1.6;
+          x += w * (P.fbm(x + 1.7, y + 9.2, 2) - 0.5) * 2;
+          y += w * (P.fbm(x + 8.3, y + 2.8, 2) - 0.5) * 2;
+        }
+        return smooth(0.28, 0.72, P.fbm(x, y, P.cx));
+      },
+    },
+    spiral: {
+      name: "Spiral",
+      fn(u, v, T, P) {
+        const r = Math.hypot(u, v), a = Math.atan2(v, u);
+        const arms = P.cx + 1, twist = (P.dist / 100) * 7;
+        const w = 0.5 + 0.5 * Math.sin(arms * a + twist * r * P.f - T + P.r[0] * TAU);
+        const rings = 0.65 + 0.35 * Math.sin(r * P.f * 8 - 2 * T);
+        return Math.pow(w * rings * (1 - smooth(0.85, 1.7, r / Math.max(P.f, 0.4))), 0.8);
+      },
+    },
+    stripes: {
+      name: "Stripes",
+      fn(u, v, T, P) {
+        const ang = P.r[3] * Math.PI;
+        const x = u * Math.cos(ang) + v * Math.sin(ang);
+        const warp = (P.dist / 100) * 2.4 * (P.fbm(u * 1.2 + Math.cos(T) * 0.5, v * 1.2 + Math.sin(T) * 0.5, 2) - 0.5) * 2;
+        return 0.5 + 0.5 * Math.sin((x * P.f * (2 + P.cx * 1.5) + warp) * Math.PI - T);
+      },
+    },
+    squares: {
+      name: "Squares",
+      fn(u, v, T, P) {
+        let m = 0;
+        const n = P.cx + 2, width = 0.035 + (P.dist / 100) * 0.12;
+        for (let i = 0; i < n; i++) {
+          const q = P.sq[i];
+          // Squares look the same every quarter turn, so k/4 turns per loop repeats cleanly.
+          const a = q.ph + (T * q.k) / 4;
+          const c = Math.cos(a), s = Math.sin(a);
+          const dx = u - q.x, dy = v - q.y;
+          const px = Math.abs(c * dx + s * dy), py = Math.abs(-s * dx + c * dy);
+          const b = q.half / P.f, r = b * 0.22;
+          const qx = px - b + r, qy = py - b + r;
+          const sd = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+          m = Math.max(m, Math.exp(-Math.abs(sd) / width));
+        }
+        return m;
+      },
+    },
+  };
+
+  let P = null;
+  function buildP() {
+    const rng = mulberry32(S.seed);
+    const nz = makeNoise(S.seed);
+    P = {
+      f: S.scale / 100, cx: S.complexity, dist: S.distortion,
+      r: [rng(), rng(), rng(), rng()],
+      src: Array.from({ length: 8 }, () => [rng(), rng(), rng() * TAU]),
+      sq: Array.from({ length: 8 }, (_, i) => {
+        const off = 0.12 + 0.2 * rng(), ang = i * 2.39996 + rng() * 0.5;
+        return { x: Math.cos(ang) * off, y: Math.sin(ang) * off, half: 0.18 + 0.07 * i + (rng() - 0.5) * 0.04, ph: rng() * TAU, k: (1 + Math.floor(rng() * 3)) * (i % 2 ? -1 : 1) };
+      }),
+      noise: nz.noise, fbm: nz.fbm, ax: 1, ay: 1,
+    };
+  }
+
+  /* ---------- colour ---------- */
+  const hexToRgb = (hex) => { const h = hex.replace("#", ""); const n = parseInt(h.length === 3 ? h.replace(/./g, "$&$&") : h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const mix = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
+  const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
+  let BG = "#0f0e11", INK = "#f4f2f7", RAMP = [];
+  function buildColours() {
+    const base = hexToRgb(S.color);
+    const dark = S.tone === "dark";
+    const bg = mix(dark ? [14, 13, 16] : [241, 240, 237], base, 0.04);
+    BG = rgb(bg);
+    INK = dark ? "#f4f2f7" : "#141217";
+    const end = dark ? [255, 255, 255] : [18, 16, 22];
+    RAMP = Array.from({ length: S.shades }, (_, i) => {
+      if (S.mapping === "size") return rgb(base);
+      const k = (i + 1) / S.shades;
+      return rgb(k <= 0.7 ? mix(bg, base, 0.3 + (k / 0.7) * 0.7) : mix(base, end, ((k - 0.7) / 0.3) * (dark ? 0.55 : 0.3)));
+    });
+  }
+
+  /* ---------- layout: which cells show, how big, which shade ---------- */
+  function layout(W, H, s, time) {
+    const cell = S.spacing * s;
+    const cols = Math.max(1, Math.floor(W / cell)), rows = Math.max(1, Math.floor(H / cell));
+    const ox = (W - cols * cell) / 2 + cell / 2, oy = (H - rows * cell) / 2 + cell / 2;
+    const half = Math.min(W, H) / 2;
+    P.ax = W / 2 / half; P.ay = H / 2 / half;
+    const T = S.mode === "ambient" ? TAU * ((time / S.loop) % 1) : 0;
+    const revealing = S.mode === "reveal" && time < REVEAL_TOTAL;
+    const gen = GENS[S.generator].fn;
+    const n = S.shades, th = S.threshold / 100, tex = S.texture / 100;
+    const sized = S.mapping !== "colour" && S.shape !== "glyph";
+    const buckets = Array.from({ length: n }, () => []);
+    for (let j = 0; j < rows; j++) {
+      const y = oy + j * cell, v = (y - H / 2) / half;
+      for (let i = 0; i < cols; i++) {
+        const x = ox + i * cell, u = (x - W / 2) / half;
+        let val = gen(u, v, T, P);
+        if (!(val > th)) continue;
+        val = Math.min(1, (val - th) / (1 - th));
+        const level = Math.min(n - 1, Math.floor(val * n));
+        const k = (level + 1) / n;
+        let size = sized ? (S.shape === "dot" ? Math.sqrt(k) : k) : 1;
+        if (tex > 0) size *= 1 - tex * 0.7 * hash(i, j, S.seed);
+        if (revealing) {
+          const delay = ((x / W) * 0.6 + (y / H) * 0.15 + hash(i, j, 7) * 0.25) * REVEAL_SPAN;
+          const p = (time - delay) / REVEAL_POP;
+          if (p <= 0) continue;
+          if (p < 1) size *= easeOutBack(p);
+        }
+        buckets[level].push(x, y, size);
+      }
+    }
+    return { base: cell * S.dotSize / 100, buckets };
+  }
+
+  /* ---------- text block ---------- */
+  const measure = document.createElement("canvas").getContext("2d");
+  function textItems(W, H, s) {
+    if (!S.textOn) return [];
+    const pad = Math.round(Math.min(W, H) * 0.07);
+    const hs = S.textSize * s, cs = Math.max(9 * s, hs * 0.26);
+    const headFont = `600 ${hs}px Geist, ui-sans-serif, system-ui, sans-serif`;
+    const capFont = `500 ${cs}px "Geist Mono", ui-monospace, monospace`;
+    measure.font = headFont;
+    const maxW = W * (S.textPos === "center" ? 0.8 : 0.62);
+    const lines = [];
+    let line = "";
+    for (const word of S.headline.trim().split(/\s+/).filter(Boolean)) {
+      const test = line ? line + " " + word : word;
+      if (line && measure.measureText(test).width > maxW) { lines.push(line); line = word; } else line = test;
+    }
+    if (line) lines.push(line);
+    const cap = S.caption.trim().toUpperCase();
+    const lh = hs * 1.06, gap = cap ? cs * 1.9 : 0;
+    const blockH = gap + lines.length * lh;
+    const top = S.textPos === "tl" ? pad : S.textPos === "center" ? (H - blockH) / 2 : H - pad - blockH;
+    const align = S.textPos === "center" ? "center" : "left";
+    const x = align === "center" ? W / 2 : pad;
+    const items = [];
+    if (cap) items.push({ text: cap, x, y: top + cs, font: capFont, family: "Geist Mono", size: cs, weight: 500, spacing: cs * 0.14, align, alpha: 0.7 });
+    lines.forEach((t, i) => items.push({ text: t, x, y: top + gap + lh * (i + 1) - hs * 0.2, font: headFont, family: "Geist", size: hs, weight: 600, spacing: -hs * 0.02, align, alpha: 1 }));
+    return items;
+  }
+
+  /* ---------- grain tile ---------- */
+  const grainTile = document.createElement("canvas");
+  grainTile.width = grainTile.height = 160;
+  {
+    const g = grainTile.getContext("2d");
+    const img = g.createImageData(160, 160);
+    const rand = mulberry32(99);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const on = rand() < 0.5 ? 0 : 255;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = on;
+      img.data[i + 3] = Math.floor(rand() * rand() * 255);
+    }
+    g.putImageData(img, 0, 0);
+  }
+
+  /* ---------- paint one frame ---------- */
+  function paint(ctx, W, H, s, time) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = BG;
+    ctx.fillRect(0, 0, W, H);
+    const { base, buckets } = layout(W, H, s, time);
+    ctx.globalAlpha = S.opacity / 100;
+    buckets.forEach((b, level) => {
+      if (!b.length) return;
+      ctx.fillStyle = RAMP[level];
+      if (S.shape === "glyph") {
+        const ch = GLYPHS[Math.round((level / Math.max(1, S.shades - 1)) * (GLYPHS.length - 1))];
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        let cur = -1;
+        for (let n = 0; n < b.length; n += 3) {
+          const fs = Math.round(base * 1.3 * b[n + 2] * 2) / 2;
+          if (fs < 1) continue;
+          if (fs !== cur) { ctx.font = `500 ${fs}px "Geist Mono", ui-monospace, monospace`; cur = fs; }
+          ctx.fillText(ch, b[n], b[n + 1]);
+        }
+        return;
+      }
+      ctx.beginPath();
+      for (let n = 0; n < b.length; n += 3) {
+        const x = b[n], y = b[n + 1], d = base * b[n + 2];
+        if (d <= 0.2) continue;
+        if (S.shape === "dot") { ctx.moveTo(x + d / 2, y); ctx.arc(x, y, d / 2, 0, TAU); }
+        else if (S.shape === "square") ctx.rect(x - d / 2, y - d / 2, d, d);
+        else if (S.shape === "bar") ctx.rect(x - d / 2, y - base / 2, d, base);
+        else { const t = Math.max(1, d * 0.28); ctx.rect(x - d / 2, y - t / 2, d, t); ctx.rect(x - t / 2, y - d / 2, t, d); }
+      }
+      ctx.fill();
+    });
+    if (S.grain > 0) {
+      const pat = ctx.createPattern(grainTile, "repeat");
+      const k = Math.floor(time * 12);
+      pat.setTransform(new DOMMatrix().translateSelf(Math.floor(hash(k, 1, 3) * 160), Math.floor(hash(k, 2, 5) * 160)).scaleSelf(Math.max(1, s * 1.5)));
+      ctx.globalAlpha = (S.grain / 100) * 0.35;
+      ctx.fillStyle = pat;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.globalAlpha = 1;
+    for (const t of textItems(W, H, s)) {
+      ctx.font = t.font;
+      ctx.textAlign = t.align;
+      ctx.textBaseline = "alphabetic";
+      if ("letterSpacing" in ctx) ctx.letterSpacing = `${t.spacing}px`;
+      ctx.globalAlpha = t.alpha;
+      ctx.fillStyle = INK;
+      ctx.fillText(t.text, t.x, t.y);
+    }
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- preview ---------- */
+  const view = document.getElementById("view");
+  const vctx = view.getContext("2d");
+  const frameEl = document.getElementById("frame");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let playing = !reduced, clock = 0, last = performance.now(), revealStart = performance.now(), dirty = true;
+  const fmt = () => FORMATS[S.format] || FORMATS["16:9"];
+
+  function fitView() {
+    const { w, h } = fmt();
+    const r = frameEl.getBoundingClientRect();
+    const availW = Math.max(40, r.width), availH = Math.max(40, r.height);
+    const cw = Math.min(availW, availH * (w / h));
+    const ch = cw * (h / w);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    view.style.width = cw + "px";
+    view.style.height = ch + "px";
+    view.width = Math.round(cw * dpr);
+    view.height = Math.round(ch * dpr);
+    dirty = true;
+  }
+  new ResizeObserver(fitView).observe(frameEl);
+
+  function previewTime(now) {
+    if (S.mode === "ambient") return clock;
+    if (S.mode === "reveal") return (now - revealStart) / 1000;
+    return 0;
+  }
+  function tick(now) {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    let animating = false;
+    if (S.mode === "ambient" && playing) { clock += dt; animating = true; }
+    if (S.mode === "reveal" && (now - revealStart) / 1000 < REVEAL_TOTAL + 0.1) animating = true;
+    if (animating || dirty) {
+      paint(vctx, view.width, view.height, view.width / fmt().w, previewTime(now));
+      dirty = false;
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------- controls ---------- */
+  const controls = document.getElementById("controls");
+  const binders = {};
+  const h = (tag, attrs = {}, kids = []) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "text") e.textContent = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+    }
+    for (const k of [].concat(kids)) if (k) e.append(k);
+    return e;
+  };
+  function group(title, headExtra) {
+    const g = h("section", { class: "group" }, [h("div", { class: "group-head" }, [h("h2", { text: title }), headExtra])]);
+    controls.append(g);
+    return g;
+  }
+  function row(g, label, ctl, id) {
+    const r = h("div", { class: "row" }, [id ? h("label", { for: id, text: label }) : h("span", { class: "label", text: label }), ctl]);
+    g.append(r);
+    return r;
+  }
+  function slider(key, min, max, step, unit = "") {
+    const id = "c-" + key;
+    const input = h("input", { type: "range", id, min, max, step, value: S[key] });
+    const out = h("output", { for: id });
+    const sync = () => { input.value = S[key]; out.textContent = S[key] + unit; input.style.setProperty("--p", ((S[key] - min) / (max - min)) * 100 + "%"); };
+    input.addEventListener("input", () => set(key, +input.value));
+    binders[key] = sync; sync();
+    return h("div", { class: "slider" }, [input, out]);
+  }
+  function seg(key, opts, labelledBy) {
+    const btns = opts.map(([v, label, icon]) => {
+      const b = h("button", { type: "button", "data-v": String(v), onclick: () => set(key, v) });
+      if (icon) { b.innerHTML = icon; b.setAttribute("aria-label", label); b.title = label; } else b.textContent = label;
+      return b;
+    });
+    const sync = () => btns.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === String(S[key]))));
+    binders[key] = sync; sync();
+    return h("div", { class: "seg", role: "group", "aria-label": labelledBy }, btns);
+  }
+  function select(key, opts) {
+    const id = "c-" + key;
+    const el = h("select", { id, class: "field", onchange: (e) => set(key, e.target.value) }, opts.map(([v, l]) => h("option", { value: v, text: l })));
+    binders[key] = () => (el.value = S[key]); binders[key]();
+    return el;
+  }
+  function textField(key, placeholder) {
+    const id = "c-" + key;
+    const el = h("input", { id, class: "field", type: "text", placeholder, value: S[key], oninput: (e) => set(key, e.target.value) });
+    binders[key] = () => { if (el.value !== S[key]) el.value = S[key]; };
+    return el;
+  }
+
+  // Generator
+  let g = group("Generator");
+  row(g, "Pattern", select("generator", Object.entries(GENS).map(([k, v]) => [k, v.name])), "c-generator");
+  const seedInput = h("input", { id: "c-seed", class: "field", type: "number", min: 0, max: 99999, value: S.seed, oninput: (e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) set("seed", v); } });
+  binders.seed = () => { if (+seedInput.value !== S.seed) seedInput.value = S.seed; };
+  const dice = h("button", { class: "icon-btn", type: "button", title: "New seed", "aria-label": "New seed", onclick: () => set("seed", Math.floor(Math.random() * 9999) + 1) });
+  dice.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg>';
+  row(g, "Seed", h("div", { class: "combo" }, [seedInput, dice]), "c-seed");
+  row(g, "Scale", slider("scale", 40, 300, 5, "%"), "c-scale");
+  row(g, "Detail", slider("complexity", 1, 6, 1), "c-complexity");
+  row(g, "Distortion", slider("distortion", 0, 100, 1), "c-distortion");
+
+  // Cells
+  g = group("Cells");
+  const icon = (body) => `<svg viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">${body}</svg>`;
+  row(g, "Shape", seg("shape", [
+    ["dot", "Dot", icon('<circle cx="7" cy="7" r="4.5"/>')],
+    ["square", "Square", icon('<rect x="2.5" y="2.5" width="9" height="9" rx=".5"/>')],
+    ["bar", "Bar", icon('<rect x="4.5" y="1.5" width="5" height="11" rx=".5"/>')],
+    ["cross", "Cross", icon('<rect x="1.5" y="5.6" width="11" height="2.8"/><rect x="5.6" y="1.5" width="2.8" height="11"/>')],
+    ["glyph", "Glyph", icon('<text x="7" y="11" text-anchor="middle" font-family="Geist Mono, monospace" font-size="11" font-weight="600">#</text>')],
+  ], "Cell shape"));
+  row(g, "Spacing", slider("spacing", 6, 60, 1, "px"), "c-spacing");
+  const sizeRow = row(g, "Dot size", slider("dotSize", 10, 100, 1, "%"), "c-dotSize");
+  const mapRow = row(g, "Value sets", seg("mapping", [["both", "Both"], ["size", "Size"], ["colour", "Tone"]], "What the pattern value controls"));
+  row(g, "Shades", slider("shades", 2, 8, 1), "c-shades");
+  row(g, "Threshold", slider("threshold", 0, 60, 1), "c-threshold");
+  row(g, "Texture", slider("texture", 0, 100, 1), "c-texture");
+
+  // Motion
+  g = group("Motion");
+  row(g, "Mode", seg("mode", [["off", "Off"], ["reveal", "Reveal"], ["ambient", "Ambient"]], "Motion mode"));
+  const loopRow = row(g, "Loop", slider("loop", 2, 12, 0.5, "s"), "c-loop");
+
+  // Appearance
+  g = group("Appearance");
+  row(g, "Tone", seg("tone", [["dark", "Dark"], ["light", "Light"]], "Background tone"));
+  const swBtns = SWATCHES.map(([c, name]) => h("button", { class: "swatch", type: "button", style: `--c:${c}`, title: name, "aria-label": name, "data-c": c, onclick: () => set("color", c) }));
+  const customInput = h("input", { type: "color", "aria-label": "Custom colour", value: S.color, oninput: (e) => set("color", e.target.value.toUpperCase()) });
+  const customWrap = h("span", { class: "swatch-custom", title: "Custom colour" }, [customInput]);
+  binders.color = () => {
+    let matched = false;
+    swBtns.forEach((b) => { const on = b.dataset.c.toLowerCase() === S.color.toLowerCase(); matched ||= on; b.setAttribute("aria-pressed", String(on)); });
+    customWrap.dataset.on = String(!matched);
+    customInput.value = S.color.length === 7 ? S.color.toLowerCase() : "#b18cff";
+  };
+  binders.color();
+  row(g, "Colour", h("div", { class: "swatches" }, [...swBtns, customWrap]));
+  row(g, "Opacity", slider("opacity", 10, 100, 1), "c-opacity");
+  row(g, "Grain", slider("grain", 0, 100, 1), "c-grain");
+
+  // Text
+  const textToggle = h("button", { class: "toggle", type: "button", onclick: () => set("textOn", !S.textOn) });
+  binders.textOn = () => { textToggle.textContent = S.textOn ? "On" : "Off"; textToggle.setAttribute("aria-pressed", String(S.textOn)); textToggle.setAttribute("aria-label", S.textOn ? "Hide text" : "Show text"); };
+  binders.textOn();
+  const textGroup = group("Text", textToggle);
+  const textRows = [
+    row(textGroup, "Eyebrow", textField("caption", "Side project"), "c-caption"),
+    row(textGroup, "Headline", textField("headline", "Your headline"), "c-headline"),
+    row(textGroup, "Position", seg("textPos", [["tl", "Top"], ["center", "Centre"], ["bl", "Bottom"]], "Text position")),
+    row(textGroup, "Size", slider("textSize", 24, 160, 2, "px"), "c-textSize"),
+  ];
+
+  // Canvas
+  g = group("Canvas");
+  row(g, "Format", select("format", Object.entries(FORMATS).map(([k, v]) => [k, v.label])), "c-format");
+
+  // Export
+  g = group("Export");
+  const nameInput = h("input", { id: "c-filename", class: "field", type: "text", spellcheck: "false", oninput: (e) => { S.filename = e.target.value; persist(); } });
+  row(g, "File name", nameInput, "c-filename");
+  row(g, "PNG size", seg("pngScale", [[1, "1×"], [2, "2×"]], "PNG resolution"));
+  const bPNG = h("button", { class: "btn primary", type: "button", onclick: () => run(exportPNG) }, ["PNG"]);
+  const bSVG = h("button", { class: "btn", type: "button", onclick: () => run(exportSVG) }, ["SVG"]);
+  const bMP4 = h("button", { class: "btn", type: "button", onclick: () => run(exportVideo) }, ["Video"]);
+  const bGIF = h("button", { class: "btn", type: "button", onclick: () => run(exportGIF) }, ["GIF"]);
+  const exportBtns = [bPNG, bSVG, bMP4, bGIF];
+  g.append(h("div", { class: "export-grid" }, exportBtns));
+  const progFill = h("div", { class: "progress-fill" });
+  const progLabel = h("div", { class: "progress-label" });
+  const progress = h("div", { class: "progress" }, [h("div", { class: "progress-track" }, [progFill]), progLabel]);
+  progress.hidden = true;
+  const hint = h("p", { class: "hint" });
+  g.append(progress, hint);
+
+  /* ---------- state changes ---------- */
+  const P_KEYS = new Set(["seed", "scale", "complexity", "distortion"]);
+  const COLOUR_KEYS = new Set(["color", "tone", "shades", "mapping"]);
+  let persistTimer = 0;
+  function persist() {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => { try { localStorage.setItem("cellwork-v1", JSON.stringify(S)); } catch (e) {} }, 250);
+  }
+  function autoName() { return `${S.generator}-${S.seed}`; }
+  function set(key, value) {
+    const prevAuto = autoName();
+    S[key] = value;
+    if (P_KEYS.has(key)) buildP();
+    if (COLOUR_KEYS.has(key)) buildColours();
+    if (key === "mode" && value === "reveal") revealStart = performance.now();
+    if (key === "format") fitView();
+    if ((key === "generator" || key === "seed") && (!S.filename || S.filename === prevAuto)) S.filename = "";
+    binders[key]?.();
+    refreshUI();
+    persist();
+    dirty = true;
+  }
+  function refreshUI() {
+    const f = fmt();
+    document.getElementById("caption").textContent = `${GENS[S.generator].name} · Seed ${S.seed} · ${f.w} × ${f.h}`;
+    loopRow.hidden = S.mode !== "ambient";
+    sizeRow.querySelector("label").textContent = S.shape === "glyph" ? "Glyph size" : S.shape === "dot" ? "Dot size" : "Cell size";
+    mapRow.hidden = S.shape === "glyph";
+    textRows.forEach((r) => (r.hidden = !S.textOn));
+    nameInput.placeholder = autoName();
+    if (document.activeElement !== nameInput) nameInput.value = S.filename;
+    document.getElementById("replay").hidden = S.mode !== "reveal";
+    const pp = document.getElementById("playpause");
+    pp.hidden = S.mode !== "ambient";
+    pp.innerHTML = playing
+      ? '<svg viewBox="0 0 12 12" fill="currentColor"><rect x="2.5" y="2" width="2.4" height="8" rx=".5"/><rect x="7.1" y="2" width="2.4" height="8" rx=".5"/></svg>Pause'
+      : '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M3 2.2v7.6a.5.5 0 0 0 .77.42l5.9-3.8a.5.5 0 0 0 0-.84l-5.9-3.8A.5.5 0 0 0 3 2.2Z"/></svg>Play';
+    const motion = S.mode !== "off";
+    bMP4.disabled = bGIF.disabled = !motion || busy;
+    bPNG.disabled = bSVG.disabled = busy;
+    const secs = S.mode === "ambient" ? S.loop : 3;
+    hint.innerHTML = motion
+      ? `<b>PNG</b> or <b>SVG</b> for stills. <b>Video</b> (MP4, ${secs}s ${S.mode === "ambient" ? "seamless loop" : "reveal"}) is the smallest and smoothest for motion; <b>GIF</b> only where video isn't accepted.`
+      : `<b>PNG</b> for web and social, <b>SVG</b> for print or further editing. Turn on Motion to export video or GIF.`;
+  }
+
+  document.getElementById("replay").addEventListener("click", () => { revealStart = performance.now(); });
+  document.getElementById("playpause").addEventListener("click", () => { playing = !playing; refreshUI(); });
+  document.getElementById("shuffle").addEventListener("click", () => {
+    const r = Math.random;
+    Object.assign(S, {
+      seed: Math.floor(r() * 9999) + 1,
+      scale: 60 + Math.round(r() * 36) * 5,
+      complexity: 1 + Math.floor(r() * 6),
+      distortion: Math.round(r() * 100),
+      color: SWATCHES[Math.floor(r() * SWATCHES.length)][0],
+      spacing: 10 + Math.floor(r() * 16),
+      shades: 3 + Math.floor(r() * 5),
+    });
+    if (S.filename.match(/^[a-z]+-\d+$/)) S.filename = "";
+    buildP(); buildColours();
+    Object.values(binders).forEach((b) => b());
+    refreshUI(); persist(); dirty = true;
+  });
+
+  /* ---------- export ---------- */
+  let busy = false;
+  const toastEl = document.getElementById("toast");
+  let toastTimer = 0;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2600);
+  }
+  function setProgress(label, p) {
+    progress.hidden = p == null;
+    if (p != null) { progFill.style.width = Math.round(p * 100) + "%"; progLabel.textContent = `${label} · ${Math.round(p * 100)}%`; }
+  }
+  async function run(fn) {
+    if (busy) return;
+    busy = true; refreshUI();
+    try { await document.fonts.ready; await fn(); }
+    catch (e) { console.error(e); toast(e && e.message ? e.message : "Export failed"); }
+    finally { busy = false; setProgress(null); refreshUI(); }
+  }
+  const fileBase = () => (S.filename.trim() || autoName()).replace(/\.(png|svg|gif|mp4|webm)$/i, "").replace(/[\\/:*?"<>|]+/g, "-");
+  const nextFrame = () => new Promise((r) => setTimeout(r, 0));
+  function stillTime() {
+    if (S.mode === "ambient") return clock;
+    if (S.mode === "reveal") return REVEAL_TOTAL + 1;
+    return 0;
+  }
+  function framePlan(fps) {
+    const secs = S.mode === "ambient" ? S.loop : REVEAL_TOTAL + 0.95;
+    return { frames: Math.round(secs * fps), start: S.mode === "ambient" ? 0 : 0 };
+  }
+
+  // Inside the Claude viewer, files go through the downloads capability; opened on its own,
+  // the page falls back to a normal browser download.
+  const downloadsReady = window.claude && typeof window.claude.use === "function" ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+  async function saveFile(filename, blob) {
+    const dl = await downloadsReady;
+    if (dl) {
+      try { await dl.save({ filename, data: blob }); toast(`Saved ${filename}`); }
+      catch (e) {
+        const code = e && e.code;
+        if (code === "declined") toast("Save cancelled");
+        else if (code === "rate_limited") toast("A save prompt is already open");
+        else if (code === "too_large") toast("That file is too large here. Try a smaller format or shorter loop.");
+        else toast(`Couldn't save ${filename}: ${(e && e.message) || code || "unknown error"}`);
+      }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    toast(`Downloaded ${filename}`);
+  }
+
+  function makeCanvas(W, H) {
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    return c;
+  }
+
+  async function exportPNG() {
+    const { w, h: hh } = fmt();
+    const k = S.pngScale;
+    const c = makeCanvas(w * k, hh * k);
+    paint(c.getContext("2d"), c.width, c.height, k, stillTime());
+    const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+    await saveFile(`${fileBase()}.png`, blob);
+  }
+
+  function exportSVG() {
+    const { w: W, h: H } = fmt();
+    const { base, buckets } = layout(W, H, 1, stillTime());
+    const f1 = (n) => Math.round(n * 10) / 10;
+    const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const out = [`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`, `<rect width="${W}" height="${H}" fill="${BG}"/>`, `<g opacity="${S.opacity / 100}">`];
+    buckets.forEach((b, level) => {
+      if (!b.length) return;
+      const parts = [];
+      if (S.shape === "glyph") {
+        const ch = GLYPHS[Math.round((level / Math.max(1, S.shades - 1)) * (GLYPHS.length - 1))];
+        for (let n = 0; n < b.length; n += 3) parts.push(`<text x="${f1(b[n])}" y="${f1(b[n + 1])}" font-size="${f1(base * 1.3 * b[n + 2])}">${esc(ch)}</text>`);
+        out.push(`<g fill="${RAMP[level]}" font-family="Geist Mono, ui-monospace, monospace" font-weight="500" text-anchor="middle" dominant-baseline="central">${parts.join("")}</g>`);
+        return;
+      }
+      for (let n = 0; n < b.length; n += 3) {
+        const x = b[n], y = b[n + 1], d = base * b[n + 2];
+        if (d <= 0.2) continue;
+        if (S.shape === "dot") parts.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(d / 2)}"/>`);
+        else if (S.shape === "square") parts.push(`<rect x="${f1(x - d / 2)}" y="${f1(y - d / 2)}" width="${f1(d)}" height="${f1(d)}"/>`);
+        else if (S.shape === "bar") parts.push(`<rect x="${f1(x - d / 2)}" y="${f1(y - base / 2)}" width="${f1(d)}" height="${f1(base)}"/>`);
+        else { const t = Math.max(1, d * 0.28); parts.push(`<rect x="${f1(x - d / 2)}" y="${f1(y - t / 2)}" width="${f1(d)}" height="${f1(t)}"/><rect x="${f1(x - t / 2)}" y="${f1(y - d / 2)}" width="${f1(t)}" height="${f1(d)}"/>`); }
+      }
+      out.push(`<g fill="${RAMP[level]}">${parts.join("")}</g>`);
+    });
+    out.push("</g>");
+    for (const t of textItems(W, H, 1)) {
+      out.push(`<text x="${f1(t.x)}" y="${f1(t.y)}" fill="${INK}" fill-opacity="${t.alpha}" font-family="${t.family}, sans-serif" font-weight="${t.weight}" font-size="${f1(t.size)}" letter-spacing="${f1(t.spacing)}" text-anchor="${t.align === "center" ? "middle" : "start"}">${esc(t.text)}</text>`);
+    }
+    out.push("</svg>");
+    return saveFile(`${fileBase()}.svg`, new Blob([out.join("\n")], { type: "image/svg+xml" }));
+  }
+
+  async function exportGIF() {
+    const { GIFEncoder, quantize, applyPalette } = await import(GIF_URL);
+    const { w, h: hh } = fmt();
+    const k = Math.min(1, 720 / Math.max(w, hh));
+    const W = Math.round(w * k), H = Math.round(hh * k);
+    const fps = 20;
+    const { frames } = framePlan(fps);
+    const c = makeCanvas(W, H);
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    // One shared palette, built from a few frames across the loop.
+    const samples = [0, Math.floor(frames / 3), Math.floor((2 * frames) / 3)];
+    const pool = new Uint8ClampedArray(W * H * 4 * samples.length);
+    samples.forEach((f, i) => { paint(ctx, W, H, k, f / fps); pool.set(ctx.getImageData(0, 0, W, H).data, i * W * H * 4); });
+    const palette = quantize(pool, 256, { format: "rgb444" });
+    const gif = GIFEncoder();
+    for (let i = 0; i < frames; i++) {
+      paint(ctx, W, H, k, i / fps);
+      const index = applyPalette(ctx.getImageData(0, 0, W, H).data, palette, "rgb444");
+      gif.writeFrame(index, W, H, i === 0 ? { palette, delay: 1000 / fps, repeat: 0 } : { delay: 1000 / fps });
+      setProgress("Encoding GIF", (i + 1) / frames);
+      if (i % 3 === 0) await nextFrame();
+    }
+    gif.finish();
+    await saveFile(`${fileBase()}.gif`, new Blob([gif.bytes()], { type: "image/gif" }));
+  }
+
+  async function exportVideo() {
+    const { w, h: hh } = fmt();
+    const k = Math.min(1, 1920 / Math.max(w, hh));
+    const W = Math.round((w * k) / 2) * 2, H = Math.round((hh * k) / 2) * 2;
+    const fps = 30;
+    const { frames } = framePlan(fps);
+    const c = makeCanvas(W, H);
+    const ctx = c.getContext("2d");
+
+    let config = null;
+    if ("VideoEncoder" in window) {
+      for (const codec of ["avc1.640028", "avc1.4d0028", "avc1.42e028"]) {
+        const cfg = { codec, width: W, height: H, bitrate: 12_000_000, framerate: fps };
+        try { if ((await VideoEncoder.isConfigSupported(cfg)).supported) { config = cfg; break; } } catch (e) {}
+      }
+    }
+
+    if (config) {
+      const { Muxer, ArrayBufferTarget } = await import(MUXER_URL);
+      const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: "avc", width: W, height: H, frameRate: fps }, fastStart: "in-memory" });
+      let failure = null;
+      const enc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => (failure = e) });
+      enc.configure(config);
+      for (let i = 0; i < frames; i++) {
+        if (failure) throw failure;
+        paint(ctx, W, H, k, i / fps);
+        const vf = new VideoFrame(c, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
+        enc.encode(vf, { keyFrame: i % (fps * 2) === 0 });
+        vf.close();
+        setProgress("Encoding MP4", (i + 1) / frames);
+        if (enc.encodeQueueSize > 6) await new Promise((r) => enc.addEventListener("dequeue", r, { once: true }));
+        else if (i % 4 === 0) await nextFrame();
+      }
+      await enc.flush();
+      if (failure) throw failure;
+      muxer.finalize();
+      await saveFile(`${fileBase()}.mp4`, new Blob([muxer.target.buffer], { type: "video/mp4" }));
+      return;
+    }
+
+    // Fallback for browsers without WebCodecs: record in real time to WebM.
+    const mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m));
+    if (!mime) throw new Error("This browser can't encode video. Try Chrome, Edge or Safari, or export a GIF.");
+    const stream = c.captureStream(fps);
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+    const chunks = [];
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    const stopped = new Promise((r) => (rec.onstop = r));
+    paint(ctx, W, H, k, 0);
+    rec.start();
+    const t0 = performance.now();
+    for (let i = 0; i < frames; i++) {
+      paint(ctx, W, H, k, i / fps);
+      setProgress("Recording WebM", (i + 1) / frames);
+      const wait = t0 + ((i + 1) * 1000) / fps - performance.now();
+      await new Promise((r) => setTimeout(r, Math.max(0, wait)));
+    }
+    rec.stop();
+    await stopped;
+    await saveFile(`${fileBase()}.webm`, new Blob(chunks, { type: "video/webm" }));
+  }
+
+  /* ---------- start ---------- */
+  if (!GENS[S.generator]) S.generator = DEFAULTS.generator;
+  if (!FORMATS[S.format]) S.format = DEFAULTS.format;
+  buildP();
+  buildColours();
+  refreshUI();
+  fitView();
+  document.fonts.ready.then(() => (dirty = true));
+  requestAnimationFrame(tick);
+})();
+</script>
+</html>
