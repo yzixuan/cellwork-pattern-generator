@@ -343,6 +343,7 @@
     },
     attractor: {
       name: "Lorenz Attractor",
+      spacing: 9, // thin orbit lines need finer cells
       fn(u, v, T, P) {
         // Density was binned per cell in buildAttractor(); look this cell up.
         const A = P.att;
@@ -398,10 +399,8 @@
 
   // Lorenz attractor: the 3D path of
   //   dx/dt = σ(y − x),  dy/dt = x(ρ − z) − y,  dz/dt = xy − βz
-  // traced once per seed/detail, then swayed about its vertical axis (out and back once per
-  // loop, so exports loop seamlessly and the butterfly never turns edge-on) and projected
-  // onto the cells. Each cell counts how much of the path passes through it, weighted so the
-  // near side reads brighter than the far side.
+  // traced once per seed/detail, viewed face-on and projected onto the cells. Each cell counts
+  // how much of the path passes through it, weighted so the near side reads brighter.
   function traceLorenz() {
     const key = `${S.seed}:${P.cx}`;
     if (P.lorenzKey === key) return P.lorenz;
@@ -433,52 +432,63 @@
       R = Math.max(R, Math.hypot(pts[j], pts[j + 1]));
     }
     // The wings' centres sit on the x = y diagonal, so face-on is a -45° turn; vary a little per seed.
-    P.lorenz = { pts, R, yaw0: -Math.PI / 4 + (rng() - 0.5) * 0.5, tilt: (rng() - 0.5) * 16, frameKey: "" };
+    P.lorenz = { pts, R, yaw0: -Math.PI / 4 + (rng() - 0.5) * 0.5, tilt: (rng() - 0.5) * 16, viewKey: "" };
     P.lorenzKey = key;
     return P.lorenz;
   }
 
   function buildAttractor(T, cols, rows, u0, v0, du) {
-    const key = `${T.toFixed(5)}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
+    const drawing = S.mode === "ambient";
+    const key = `${drawing ? T.toFixed(5) : "full"}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
     if (P.attKey === key) return;
     const L = traceLorenz();
     const pitch = ((8 + P.dist * 0.5 + L.tilt) * Math.PI) / 180; // Distortion tilts the camera
-    const view = (t) => [L.yaw0 + 0.5 * Math.sin(t), pitch];
-    // Measure the on-screen extent across the whole sway once, so the zoom stays steady.
-    if (L.frameKey !== `${P.dist}`) {
+    const cy = Math.cos(L.yaw0), sy = Math.sin(L.yaw0), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const pts = L.pts, count = pts.length / 3;
+
+    // Project every point once per view and frame size; the drawing animation then just
+    // bins a growing prefix of this list.
+    const viewKey = `${P.dist}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}:${P.f}:${P.ax.toFixed(3)}:${P.ay.toFixed(3)}`;
+    if (L.viewKey !== viewKey) {
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-      for (let k = 0; k < 12; k++) {
-        const [yw, pt] = view((k / 12) * TAU);
-        const cy = Math.cos(yw), sy = Math.sin(yw), cp = Math.cos(pt), sp = Math.sin(pt);
-        for (let j = 0; j < L.pts.length; j += 21) {
-          const X = L.pts[j] * cy - L.pts[j + 1] * sy;
-          const Y = -L.pts[j + 2] * cp + (L.pts[j] * sy + L.pts[j + 1] * cy) * sp;
-          if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y;
-        }
+      const X = new Float32Array(count), Y = new Float32Array(count), W = new Float32Array(count);
+      for (let i = 0, j = 0; i < count; i++, j += 3) {
+        const x = pts[j] * cy - pts[j + 1] * sy, y = pts[j] * sy + pts[j + 1] * cy, z = pts[j + 2];
+        X[i] = x; Y[i] = -z * cp + y * sp;
+        W[i] = 0.75 - 0.35 * ((y * cp + z * sp) / L.R); // nearer side brighter
+        if (X[i] < x0) x0 = X[i]; if (X[i] > x1) x1 = X[i]; if (Y[i] < y0) y0 = Y[i]; if (Y[i] > y1) y1 = Y[i];
       }
-      Object.assign(L, { frameKey: `${P.dist}`, fx: (x0 + x1) / 2, fy: (y0 + y1) / 2, fw: x1 - x0, fh: y1 - y0 });
+      const fit = Math.min((2 * P.ax) / (x1 - x0), (2 * P.ay) / (y1 - y0)) * 0.9 * P.f;
+      const cell = new Int32Array(count);
+      const full = new Float32Array(cols * rows);
+      for (let i = 0; i < count; i++) {
+        const ix = Math.round(((X[i] - (x0 + x1) / 2) * fit - u0) / du);
+        const iy = Math.round(((Y[i] - (y0 + y1) / 2) * fit - v0) / du);
+        cell[i] = ix >= 0 && iy >= 0 && ix < cols && iy < rows ? iy * cols + ix : -1;
+        if (cell[i] >= 0) full[cell[i]] += W[i];
+      }
+      // Brightness is set against the finished shape (90th percentile of its lit cells), so
+      // lines keep the same brightness while they draw in.
+      const lit = [];
+      for (let i = 0; i < full.length; i++) if (full[i] > 0) lit.push(full[i]);
+      lit.sort((a, b) => a - b);
+      Object.assign(L, { viewKey, cell, W, ref: lit.length ? lit[Math.floor(lit.length * 0.9)] : 1 });
     }
-    const fit = Math.min((2 * P.ax) / L.fw, (2 * P.ay) / L.fh) * 0.9 * P.f;
-    const [yaw] = view(T);
-    const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+
+    // Ambient: the path draws itself over 80% of the loop with a bright head, holds, then
+    // fades out, so the loop starts and ends empty. Other modes show the finished shape.
+    const tau = drawing ? T / TAU : 1;
+    const grow = drawing ? smooth(0, 0.8, tau) : 1;
+    const fade = drawing ? 1 - smooth(0.9, 1, tau) : 1;
+    const shown = Math.floor(count * grow);
+    const head = Math.max(1, Math.floor(count * 0.02));
     const hist = new Float32Array(cols * rows);
-    const pts = L.pts;
-    for (let j = 0; j < pts.length; j += 3) {
-      const x = pts[j] * cy - pts[j + 1] * sy;
-      const y = pts[j] * sy + pts[j + 1] * cy;
-      const z = pts[j + 2];
-      const depth = y * cp + z * sp; // toward the viewer is negative
-      const ix = Math.round(((x - L.fx) * fit - u0) / du);
-      const iy = Math.round(((-z * cp + y * sp - L.fy) * fit - v0) / du);
-      if (ix >= 0 && iy >= 0 && ix < cols && iy < rows) hist[iy * cols + ix] += 0.75 - 0.35 * (depth / L.R);
+    for (let i = 0; i < shown; i++) {
+      const c = L.cell[i];
+      if (c < 0) continue;
+      hist[c] += L.W[i] * (drawing && grow < 1 && i > shown - head ? 4 : 1);
     }
-    // Brightness relative to a typical busy line cell (90th percentile of lit cells): a single
-    // orbit reads as a clear track, crossings saturate, and empty gaps stay dark.
-    const lit = [];
-    for (let i = 0; i < hist.length; i++) if (hist[i] > 0) lit.push(hist[i]);
-    lit.sort((a, b) => a - b);
-    const ref = lit.length ? lit[Math.floor(lit.length * 0.9)] : 1;
-    for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(Math.min(1, hist[i] / ref), 0.6);
+    for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(Math.min(1, hist[i] / L.ref), 0.6) * fade;
     P.att = { val: hist, cols, rows, u0, v0, du };
     P.attKey = key;
   }
@@ -613,7 +623,7 @@
   }
 
   /* ---------- paint one frame ---------- */
-  function paint(ctx, W, H, s, time) {
+  function paint(ctx, W, H, s, time, staticGrain = false) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     ctx.fillStyle = BG;
@@ -648,7 +658,8 @@
     });
     if (S.grain > 0) {
       const pat = ctx.createPattern(grainTile, "repeat");
-      const k = Math.floor(time * 12);
+      // GIF's 256-colour palette turns moving grain into background flicker, so GIFs hold it still.
+      const k = staticGrain ? 0 : Math.floor(time * 12);
       pat.setTransform(new DOMMatrix().translateSelf(Math.floor(hash(k, 1, 3) * 160), Math.floor(hash(k, 2, 5) * 160)).scaleSelf(Math.max(1, s * 1.5)));
       ctx.globalAlpha = (S.grain / 100) * 0.35;
       ctx.fillStyle = pat;
@@ -860,8 +871,12 @@
     persistTimer = setTimeout(() => { try { localStorage.setItem("cellwork-v1", JSON.stringify(S)); } catch (e) {} }, 250);
   }
   function autoName() { return `${S.generator}-${S.seed}`; }
+  // Patterns can prefer a spacing. Switching patterns moves spacing between the two
+  // preferences only if it still sits at the old one, so a custom spacing is kept.
+  const prefSpacing = (g) => GENS[g].spacing || DEFAULTS.spacing;
   function set(key, value) {
     const prevAuto = autoName();
+    if (key === "generator" && S.spacing === prefSpacing(S.generator)) { S.spacing = prefSpacing(value); binders.spacing?.(); }
     S[key] = value;
     if (P_KEYS.has(key)) buildP();
     if (COLOUR_KEYS.has(key)) buildColours();
@@ -1044,11 +1059,11 @@
     // One shared palette, built from a few frames across the loop.
     const samples = [0, Math.floor(frames / 3), Math.floor((2 * frames) / 3)];
     const pool = new Uint8ClampedArray(W * H * 4 * samples.length);
-    samples.forEach((f, i) => { paint(ctx, W, H, k, f / fps); pool.set(ctx.getImageData(0, 0, W, H).data, i * W * H * 4); });
+    samples.forEach((f, i) => { paint(ctx, W, H, k, f / fps, true); pool.set(ctx.getImageData(0, 0, W, H).data, i * W * H * 4); });
     const palette = quantize(pool, 256, { format: "rgb444" });
     const gif = GIFEncoder();
     for (let i = 0; i < frames; i++) {
-      paint(ctx, W, H, k, i / fps);
+      paint(ctx, W, H, k, i / fps, true);
       const index = applyPalette(ctx.getImageData(0, 0, W, H).data, palette, "rgb444");
       gif.writeFrame(index, W, H, i === 0 ? { palette, delay: 1000 / fps, repeat: 0 } : { delay: 1000 / fps });
       setProgress("Encoding GIF", (i + 1) / frames);
