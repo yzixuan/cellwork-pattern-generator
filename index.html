@@ -69,6 +69,8 @@
   select.field { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23edeaf1' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; }
   .combo { display: flex; gap: 6px; }
   .combo .field { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
+  .combo[data-off="true"] .field { opacity: 0.45; }
+  .icon-btn[aria-pressed="false"] { color: var(--faint); }
 
   .swatches { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 9px; border-radius: 7px; background: var(--raised); }
   .swatch { width: 20px; height: 20px; flex: none; border-radius: 50%; border: 0; padding: 0; background: var(--c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
@@ -178,7 +180,7 @@
     shape: "dot", spacing: 16, dotSize: 90, mapping: "both", shades: 5, threshold: 8, texture: 10,
     mode: "ambient", loop: 6,
     tone: "dark", color: "#B18CFF", opacity: 95, grain: 16,
-    textOn: false, caption: "Category", headline: "Your headline here", subtitle: "A short line of supporting text", textPos: "bl", textSize: 72,
+    textOn: false, caption: "Category", headline: "Your headline here", subtitle: "A short line of supporting text", showCaption: true, showHeadline: true, showSubtitle: true, textPos: "bl", textSize: 72,
     format: "16:9", fileType: "png", pngScale: 1, filename: "",
   };
 
@@ -690,9 +692,9 @@
       if (line) out.push(line);
       return out;
     };
-    const lines = wrap(S.headline, headFont);
-    const subLines = wrap(S.subtitle || "", subFont);
-    const cap = S.caption.trim().toUpperCase();
+    const lines = S.showHeadline ? wrap(S.headline, headFont) : [];
+    const subLines = S.showSubtitle ? wrap(S.subtitle || "", subFont) : [];
+    const cap = S.showCaption ? S.caption.trim().toUpperCase() : "";
     const lh = hs * 1.06, gap = cap ? cs * 1.9 : 0;
     const slh = ss * 1.35, subGap = subLines.length ? hs * 0.42 : 0;
     const blockH = gap + lines.length * lh + subGap + subLines.length * slh;
@@ -925,14 +927,31 @@
   row(g, "Grain", slider("grain", 0, 100, 1), "c-grain");
 
   // Text
+  // Eye button beside a text field: shows or hides that line without clearing what's typed.
+  const EYE_OPEN = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></svg>';
+  const EYE_SHUT = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 3.8A6.6 6.6 0 0 1 8 3.5C12 3.5 14.5 8 14.5 8a12 12 0 0 1-1.7 2.3M4.2 5A12 12 0 0 0 1.5 8S4 12.5 8 12.5c1 0 2-.3 2.8-.7"/><path d="M2 2l12 12"/></svg>';
+  function withEye(key, name, field) {
+    const btn = h("button", { class: "icon-btn", type: "button", onclick: () => set(key, !S[key]) });
+    const wrap = h("div", { class: "combo" }, [field, btn]);
+    binders[key] = () => {
+      const on = S[key];
+      btn.innerHTML = on ? EYE_OPEN : EYE_SHUT;
+      btn.setAttribute("aria-pressed", String(on));
+      btn.setAttribute("aria-label", `${on ? "Hide" : "Show"} ${name}`);
+      btn.title = `${on ? "Hide" : "Show"} ${name}`;
+      wrap.dataset.off = String(!on);
+    };
+    binders[key]();
+    return wrap;
+  }
   const textToggle = h("button", { class: "toggle", type: "button", onclick: () => set("textOn", !S.textOn) });
   binders.textOn = () => { textToggle.textContent = S.textOn ? "On" : "Off"; textToggle.setAttribute("aria-pressed", String(S.textOn)); textToggle.setAttribute("aria-label", S.textOn ? "Hide text" : "Show text"); };
   binders.textOn();
   const textGroup = group("Text", textToggle);
   const textRows = [
-    row(textGroup, "Label", textField("caption", "Category"), "c-caption"),
-    row(textGroup, "Headline", textField("headline", "Your headline here"), "c-headline"),
-    row(textGroup, "Subtitle", textField("subtitle", "Optional supporting line"), "c-subtitle"),
+    row(textGroup, "Label", withEye("showCaption", "label", textField("caption", "Category")), "c-caption"),
+    row(textGroup, "Headline", withEye("showHeadline", "headline", textField("headline", "Your headline here")), "c-headline"),
+    row(textGroup, "Subtitle", withEye("showSubtitle", "subtitle", textField("subtitle", "Optional supporting line")), "c-subtitle"),
     row(textGroup, "Position", seg("textPos", [["tl", "Top"], ["center", "Centre"], ["bl", "Bottom"]], "Text position")),
     row(textGroup, "Size", slider("textSize", 24, 160, 2, "px"), "c-textSize"),
   ];
