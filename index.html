@@ -378,7 +378,7 @@
       src: Array.from({ length: 8 }, () => [rng(), rng(), rng() * TAU]),
       noise: nz.noise, fbm: nz.fbm, ax: 1, ay: 1, sqKey: "", sqPlaced: [], dropKey: "", drops: [],
       attKey: "", att: null, lorenzKey: "", lorenz: null,
-      cliffKey: "", cliff: null, cliffPickKey: "", cliffPick: null,
+      cliffKey: "", cliff: null, cliffPickKey: "", cliffPick: null, cliffOrbitKey: "", cliffOrbit: null,
     };
   }
 
@@ -506,81 +506,105 @@
   }
 
   // Clifford attractor:  x' = sin(a·y) + c·cos(a·x),  y' = sin(b·x) + d·cos(b·y).
-  // Unlike Lorenz, successive points jump all over the shape, so there is no line to trace.
-  // In Ambient the orbit "develops": points settle in like dust over 80% of the loop until
-  // the filaments emerge, hold, then fade, so the loop starts and ends empty. The parameters
-  // drift round a small circle once per loop (Distortion sets how far).
-  const cliffordParams = (base, amp, T) => [
-    base[0] + amp * Math.cos(T), base[1] + amp * Math.sin(T),
-    base[2] + amp * 0.5 * Math.sin(T + 1), base[3] + amp * 0.5 * Math.cos(T + 2),
-  ];
+  // Successive points jump all over the shape, so there is no line to trace. The orbit is one
+  // long list treated as a ring; in Ambient a window over 40% of it slides once round the ring
+  // per loop. New specks settle in as the oldest ones leave, so the shape stays visible and
+  // shimmers, and after one loop the window is back where it started: a seamless loop.
+  // Distortion sways the whole shape (rotating it); changing the parameters instead would
+  // scramble every speck between frames, since the map is chaotic.
+  const CLIFF_WINDOW = 0.4;
 
   // Most random parameters collapse to a few points or a loop. Search seeded candidates and
-  // keep the one whose orbit covers the most of the plane at its worst point in the loop,
-  // so the shape never collapses mid-animation. Also measures its real bounds for framing.
+  // keep the one whose orbit covers the most of the plane; also measure its real bounds.
   function pickClifford() {
-    const key = `${S.seed}:${P.dist}`;
-    if (P.cliffPickKey === key) return P.cliffPick;
+    if (P.cliffPickKey === `${S.seed}`) return P.cliffPick;
     const rng = mulberry32(S.seed * 97 + 3);
-    const amp = (P.dist / 100) * 0.15;
-    const PHASES = 6, STEPS = 4000, GRID = 64;
+    const STEPS = 4000, GRID = 64;
     let best = null, bestScore = -1;
     for (let tries = 0; tries < 150 && bestScore < 900; tries++) {
-      const base = [rng() * 4 - 2, rng() * 4 - 2, rng() * 3 - 1.5, rng() * 3 - 1.5];
-      let minCov = Infinity, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-      for (let ph = 0; ph < PHASES && minCov > bestScore; ph++) {
-        const [a, b, c, d] = cliffordParams(base, amp, (ph / PHASES) * TAU);
-        const seen = new Uint8Array(GRID * GRID);
-        let x = 0.1, y = 0.1, cov = 0;
-        for (let i = 0; i < STEPS; i++) {
-          const nx = Math.sin(a * y) + c * Math.cos(a * x);
-          y = Math.sin(b * x) + d * Math.cos(b * y);
-          x = nx;
-          if (i < 50) continue;
-          if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
-          const k = Math.floor(((y + 2.5) / 5) * GRID) * GRID + Math.floor(((x + 2.5) / 5) * GRID);
-          if (!seen[k]) { seen[k] = 1; cov++; }
-        }
-        minCov = Math.min(minCov, cov);
+      const [a, b, c, d] = [rng() * 4 - 2, rng() * 4 - 2, rng() * 3 - 1.5, rng() * 3 - 1.5];
+      const seen = new Uint8Array(GRID * GRID);
+      let x = 0.1, y = 0.1, cov = 0, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (let i = 0; i < STEPS; i++) {
+        const nx = Math.sin(a * y) + c * Math.cos(a * x);
+        y = Math.sin(b * x) + d * Math.cos(b * y);
+        x = nx;
+        if (i < 50) continue;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        const k = Math.floor(((y + 2.5) / 5) * GRID) * GRID + Math.floor(((x + 2.5) / 5) * GRID);
+        if (!seen[k]) { seen[k] = 1; cov++; }
       }
-      if (minCov > bestScore) { bestScore = minCov; best = { base, amp, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, sx: x1 - x0, sy: y1 - y0 }; }
+      if (cov > bestScore) { bestScore = cov; best = { p: [a, b, c, d], cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, sx: x1 - x0, sy: y1 - y0 }; }
     }
     P.cliffPick = best;
-    P.cliffPickKey = key;
+    P.cliffPickKey = `${S.seed}`;
     return best;
+  }
+
+  // The orbit itself, centred on its bounds; cached per seed and point count.
+  function cliffordOrbit() {
+    const key = `${S.seed}:${P.cx}`;
+    if (P.cliffOrbitKey === key) return P.cliffOrbit;
+    const pick = pickClifford();
+    const [a, b, c, d] = pick.p;
+    const M = 60000 + P.cx * 60000;
+    const X = new Float32Array(M), Y = new Float32Array(M);
+    let x = 0.1, y = 0.1, r = 0;
+    for (let i = 0; i < M + 100; i++) {
+      const nx = Math.sin(a * y) + c * Math.cos(a * x);
+      y = Math.sin(b * x) + d * Math.cos(b * y);
+      x = nx;
+      if (i < 100) continue; // skip the run-in
+      X[i - 100] = x - pick.cx; Y[i - 100] = y - pick.cy;
+      r = Math.max(r, Math.hypot(X[i - 100], Y[i - 100]));
+    }
+    // r = farthest point from the centre: the shape never leaves that circle while it sways.
+    P.cliffOrbit = { X, Y, M, pick, r, refKey: "" };
+    P.cliffOrbitKey = key;
+    return P.cliffOrbit;
   }
 
   function buildClifford(T, cols, rows, u0, v0, du) {
     const drawing = S.mode === "ambient";
     const key = `${drawing ? T.toFixed(5) : "full"}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
     if (P.cliffKey === key) return;
-    const pick = pickClifford();
-    const [a, b, c, d] = cliffordParams(pick.base, pick.amp, drawing ? T : 0);
-    // Fit the measured bounds inside the frame, then apply Scale as zoom.
-    const fit = Math.min((2 * P.ax) / pick.sx, (2 * P.ay) / pick.sy) * 0.88 * P.f;
-    const tau = drawing ? T / TAU : 1;
-    // Squared so the sparse "dust" phase lasts longer before the shape fills in; starts at 0
-    // so the first frame matches the empty last frame.
-    const grow = drawing ? smooth(0, 0.8, tau) ** 2 : 1;
-    const fade = drawing ? 1 - smooth(0.9, 1, tau) : 1;
-    const full = 60000 + P.cx * 60000, N = Math.floor(full * grow);
-    const hist = new Float32Array(cols * rows);
-    let x = 0.1, y = 0.1;
-    for (let i = 0; i < N + 100; i++) {
-      const nx = Math.sin(a * y) + c * Math.cos(a * x);
-      y = Math.sin(b * x) + d * Math.cos(b * y);
-      x = nx;
-      if (i < 100) continue; // skip the run-in before the orbit settles
-      const ix = Math.round(((x - pick.cx) * fit - u0) / du), iy = Math.round(((y - pick.cy) * fit - v0) / du);
-      if (ix >= 0 && iy >= 0 && ix < cols && iy < rows) hist[iy * cols + ix]++;
+    const O = cliffordOrbit(), { X, Y, M, pick } = O;
+    // Fit the shape inside the frame (with room to sway when Distortion is on), then apply Scale.
+    const sway = (P.dist / 100) * 0.35;
+    // Box of the shape turned to the full sway angle, capped by the circle it can't leave.
+    const cs = Math.cos(sway), sn = Math.sin(sway);
+    const w = Math.min(2 * O.r, pick.sx * cs + pick.sy * sn), h = Math.min(2 * O.r, pick.sy * cs + pick.sx * sn);
+    const fit = Math.min((2 * P.ax) / w, (2 * P.ay) / h) * 0.88 * P.f;
+    const bin = (x, y) => {
+      const ix = Math.round((x * fit - u0) / du), iy = Math.round((y * fit - v0) / du);
+      return ix >= 0 && iy >= 0 && ix < cols && iy < rows ? iy * cols + ix : -1;
+    };
+    // Brightness reference: the log density of the whole orbit, once per framing.
+    const refKey = `${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}:${fit.toFixed(5)}`;
+    if (O.refKey !== refKey) {
+      const full = new Float32Array(cols * rows);
+      for (let i = 0; i < M; i++) { const k = bin(X[i], Y[i]); if (k >= 0) full[k]++; }
+      let max = 0;
+      for (let i = 0; i < full.length; i++) if (full[i] > max) max = full[i];
+      O.ref = Math.log1p(max);
+      O.refKey = refKey;
     }
-    // Scale counts up to what the finished shape would hold, so early specks show at their
-    // eventual brightness and the shape fills in rather than brightening. Log scale keeps faint
-    // filaments visible next to dense cores.
-    let max = 0;
-    const g = Math.max(grow, 1e-3);
-    for (let i = 0; i < hist.length; i++) { hist[i] = Math.log1p(hist[i] / g); if (hist[i] > max) max = hist[i]; }
-    if (max > 0) for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(hist[i] / max, 0.85) * fade;
+    const hist = new Float32Array(cols * rows);
+    if (drawing) {
+      const rot = sway * Math.sin(T), cr = Math.cos(rot), sr = Math.sin(rot);
+      const W = Math.floor(M * CLIFF_WINDOW), start = Math.floor((T / TAU) * M);
+      for (let n = 0; n < W; n++) {
+        const i = (start + n) % M;
+        const k = bin(X[i] * cr - Y[i] * sr, X[i] * sr + Y[i] * cr);
+        if (k >= 0) hist[k] += Math.sin((Math.PI * (n + 0.5)) / W); // soft in, soft out
+      }
+      // Scale the window's counts up to the whole orbit (2/π is the mean of the sine weight).
+      const scale = 1 / (CLIFF_WINDOW * (2 / Math.PI));
+      for (let i = 0; i < hist.length; i++) hist[i] *= scale;
+    } else {
+      for (let i = 0; i < M; i++) { const k = bin(X[i], Y[i]); if (k >= 0) hist[k]++; }
+    }
+    for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(Math.min(1, Math.log1p(hist[i]) / O.ref), 0.85);
     P.cliff = { val: hist, cols, rows, u0, v0, du };
     P.cliffKey = key;
   }
