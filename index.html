@@ -357,6 +357,16 @@
         return m;
       },
     },
+    trees: {
+      name: "Trees",
+      spacing: 6, // thin branches need fine cells
+      fn(u, v, T, P) {
+        const A = P.lsys;
+        const ix = Math.round((u - A.u0) / A.du), iy = Math.round((v - A.v0) / A.du);
+        if (ix < 0 || iy < 0 || ix >= A.cols || iy >= A.rows) return 0;
+        return A.val[iy * A.cols + ix];
+      },
+    },
     rain: {
       name: "Rain Drops",
       fn(u, v, T, P) {
@@ -400,16 +410,6 @@
       spacing: 6, // fine cells show the speckle and filaments
       fn(u, v, T, P) {
         const A = P.cliff;
-        const ix = Math.round((u - A.u0) / A.du), iy = Math.round((v - A.v0) / A.du);
-        if (ix < 0 || iy < 0 || ix >= A.cols || iy >= A.rows) return 0;
-        return A.val[iy * A.cols + ix];
-      },
-    },
-    lsystem: {
-      name: "L-Systems",
-      spacing: 6, // thin branches need fine cells
-      fn(u, v, T, P) {
-        const A = P.lsys;
         const ix = Math.round((u - A.u0) / A.du), iy = Math.round((v - A.v0) / A.du);
         if (ix < 0 || iy < 0 || ix >= A.cols || iy >= A.rows) return 0;
         return A.val[iy * A.cols + ix];
@@ -866,7 +866,7 @@
     const T = TAU * ((time / S.loop) % 1);
     if (S.generator === "attractor") buildAttractor(T, cols, rows, (ox - W / 2) / half, (oy - H / 2) / half, cell / half);
     if (S.generator === "clifford") buildClifford(T, cols, rows, (ox - W / 2) / half, (oy - H / 2) / half, cell / half);
-    if (S.generator === "lsystem") buildLSystem(T, cols, rows, (ox - W / 2) / half, (oy - H / 2) / half, cell / half);
+    if (S.generator === "trees") buildLSystem(T, cols, rows, (ox - W / 2) / half, (oy - H / 2) / half, cell / half);
     const gen = GENS[S.generator].fn;
     const n = S.shades, th = S.threshold / 100, tex = S.texture / 100;
     const sized = S.mapping !== "colour" && S.shape !== "glyph";
@@ -1007,6 +1007,7 @@
 
   /* ENGINE:END */
 
+  if (S.generator === "lsystem") S.generator = "trees"; // renamed from L-Systems
   // A saved choice may point at a pattern that's gone or hidden; fall back before the menu is built.
   if (!GENS[S.generator] || GENS[S.generator].hidden) S.generator = DEFAULTS.generator;
 
