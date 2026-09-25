@@ -48,7 +48,10 @@
   @supports not selector(::-webkit-scrollbar) {
     #controls { scrollbar-width: thin; scrollbar-color: rgba(237, 234, 241, 0.18) transparent; }
   }
-  .brand { flex: none; background: var(--panel); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 18px 18px; border-bottom: 1px solid var(--line); }
+  .brand { flex: none; background: var(--panel); display: flex; flex-direction: column; gap: 16px; padding: 20px 18px 16px; border-bottom: 1px solid var(--line); }
+  /* Randomize sits under the name, above the settings it changes. */
+  .btn.randomize { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 36px; }
+  .btn.randomize svg { width: 14px; height: 14px; color: var(--muted); }
   /* Logo mark: a 3 × 3 value ramp. On hover a wave rolls through the dots, corner to corner. */
   .brand-id { display: flex; align-items: center; gap: 11px; min-width: 0; }
   .mark { flex: none; color: var(--accent); }
@@ -153,8 +156,9 @@
         <p>Animated generative patterns</p>
         </div>
       </div>
-      <button class="icon-btn" id="shuffle" type="button" title="Randomize" aria-label="Randomize">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg>
+      <button class="btn randomize" id="shuffle" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg>
+        Randomize
       </button>
     </header>
     <div id="controls"></div>
