@@ -642,41 +642,37 @@
 
   // L-systems: a string of symbols is rewritten by plant rules a few times, then read by a
   // "turtle": F = step forward and draw, + / − = turn, [ ] = save / return to a branch point.
-  // Each seed picks a rule set and random variants (a stochastic L-system). The loop grows
-  // the plant outward from the root, holds, then retracts in reverse, while a gentle wind
-  // sways it; the first frame is the fully grown plant.
+  // The canvas shows a forest: a row of plants, each its own seeded specimen of one of four rule
+  // sets. Taller plants stand in front, shorter ones further back and dimmer. Only the crowns
+  // are in frame; trunks run off the bottom edge. The loop starts on the grown forest, retracts
+  // it, regrows it in a staggered wave (each plant from its first visible branch, so there is no
+  // off-screen wait), and holds, while a gentle wind sways each plant slightly out of step.
   const LSYS_PLANTS = [
     { axiom: "X", angle: 25, rules: { X: ["F+[[X]-X]-F[-FX]+X", "F-[[X]+X]+F[+FX]-X", "F+[[X]-X]-F[-FX]+X"], F: ["FF"] }, depth: [3, 4, 5, 5, 6, 6] },
     { axiom: "F", angle: 22.5, rules: { F: ["FF+[+F-F-F]-[-F+F+F]", "FF-[-F+F+F]+[+F-F-F]"] }, depth: [2, 3, 3, 4, 4, 4] },
     { axiom: "F", angle: 25.7, rules: { F: ["F[+F]F[-F]F", "F[+F]F", "F[-F]F"] }, depth: [3, 3, 4, 4, 5, 5] },
     { axiom: "X", angle: 22, rules: { X: ["F[+X][-X]FX", "F[-X]FX", "F[+X]FX", "F[+X][-X]X"], F: ["FF"] }, depth: [4, 5, 5, 6, 6, 7] },
   ];
-  const LSYS_MAX = 250000; // cap on the rewritten string so high Detail stays fast
+  const LSYS_MAX = 250000; // cap on the forest's total rewritten symbols so high Detail stays fast
 
-  // Rewrite the string and precompute everything that doesn't change frame to frame.
-  function growPlant() {
-    const key = `${S.seed}:${P.cx}:${P.dist}`;
-    if (P.lsysPlantKey === key) return P.lsysPlant;
-    const rng = mulberry32(S.seed * 131 + 7);
-    const plant = LSYS_PLANTS[S.seed % LSYS_PLANTS.length];
+  // Rewrite one plant's string, with a fixed random twist per turn (Distortion).
+  function growPlant(rng, type, cap) {
+    const plant = LSYS_PLANTS[type];
     let str = plant.axiom;
     for (let g = 0; g < plant.depth[Math.min(5, P.cx - 1)]; g++) {
       let next = "";
       for (const ch of str) {
         const opts = plant.rules[ch];
         next += opts ? opts[Math.floor(rng() * opts.length)] : ch;
-        if (next.length > LSYS_MAX) break;
+        if (next.length > cap) break;
       }
-      if (next.length > LSYS_MAX) break;
+      if (next.length > cap) break;
       str = next;
     }
-    // Distortion bends each turn by a fixed random amount, so branches look less mechanical.
     const jitter = new Float32Array(str.length);
     const j = (P.dist / 100) * 0.5;
     for (let i = 0; i < str.length; i++) jitter[i] = (rng() - 0.5) * j;
-    P.lsysPlant = { str, angle: (plant.angle * Math.PI) / 180, jitter };
-    P.lsysPlantKey = key;
-    return P.lsysPlant;
+    return { str, angle: (plant.angle * Math.PI) / 180, jitter };
   }
 
   // Walk the turtle. `sway` bends every forward step a little, more so higher up the plant.
@@ -701,40 +697,44 @@
     return segs;
   }
 
-  function buildLSystem(T, cols, rows, u0, v0, du) {
-    const key = `${T.toFixed(5)}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
-    if (P.lsysKey === key) return;
-    const plant = growPlant();
-    // Framing: fit the crown (the top 60% of the plant) to the canvas, sized by how wide the
-    // crown spreads; the lower 40%, trunk included, runs off the bottom edge.
-    if (!plant.frame) {
+  // Plant the forest: strings, placement, size and timing per plant. Depends on the frame's
+  // shape, since wider formats get more plants.
+  function plantForest() {
+    const key = `${S.seed}:${P.cx}:${P.dist}:${P.ax.toFixed(3)}:${P.ay.toFixed(3)}`;
+    if (P.lsysPlantKey === key) return P.lsysPlant;
+    const rng = mulberry32(S.seed * 131 + 7);
+    const n = Math.max(3, Math.min(9, Math.round(P.ax * 2.4 + 0.5)));
+    // The tallest plant's top 60% fills the frame height; its root sits below the bottom edge.
+    const Hmax = (2 * P.ay * 0.96) / 0.6, rootV = -P.ay * 0.96 + Hmax;
+    const trees = [];
+    for (let i = 0; i < n; i++) {
+      const plant = growPlant(rng, Math.floor(rng() * LSYS_PLANTS.length), LSYS_MAX / n);
       const segs = walkPlant(plant, 0);
       let top = 0, maxDepth = 0, maxDist = 1;
       for (let k = 0; k < segs.length; k += 6) {
         top = Math.min(top, segs[k + 3]);
         maxDepth = Math.max(maxDepth, segs[k + 4]); maxDist = Math.max(maxDist, segs[k + 5] + 1);
       }
-      const bottom = top * 0.4; // y grows downward from the root at 0; top is negative
-      let x0 = Infinity, x1 = -Infinity;
-      for (let k = 0; k < segs.length; k += 6) {
-        for (const j of [0, 2]) {
-          const x = segs[k + j], y = segs[k + j + 1];
-          if (y <= bottom) { if (x < x0) x0 = x; if (x > x1) x1 = x; }
-        }
-      }
-      if (!isFinite(x0)) { x0 = -1; x1 = 1; }
-      plant.frame = { cx: (x0 + x1) / 2, cy: (top + bottom) / 2, w: (x1 - x0) * 1.06, h: (bottom - top) * 1.04, maxDepth, maxDist };
+      const size = 0.62 + 0.38 * rng();             // 1 = tallest, in front
+      const k = (size * Hmax) / Math.max(1, -top);  // plant units → frame units
+      const spread = n > 1 ? i / (n - 1) : 0.5;
+      const u = (spread * 2 - 1) * P.ax * 0.86 + (rng() - 0.5) * (P.ax / n) * 0.8;
+      // Growth begins at the first branch that reaches into the frame.
+      let startDist = maxDist;
+      for (let s = 0; s < segs.length; s += 6) if (rootV + segs[s + 3] * k < P.ay && segs[s + 5] < startDist) startDist = segs[s + 5];
+      trees.push({ plant, u, k, size, maxDepth, maxDist, startDist: Math.min(startDist, maxDist - 1), delay: rng() * 0.12, phase: rng() * TAU });
     }
-    const F = plant.frame;
-    const fit = Math.min((2 * P.ax) / F.w, (2 * P.ay) / F.h) * P.f;
+    trees.sort((a, b) => a.size - b.size); // back to front
+    P.lsysPlant = { trees, rootV };
+    P.lsysPlantKey = key;
+    return P.lsysPlant;
+  }
 
-    // Loop timing, shifted so T = 0 is the grown plant: hold, retract, pause, regrow, hold.
-    const tau = (T / TAU + 0.55) % 1;
-    const ease = (q) => q * q * (3 - 2 * q);
-    const grow = tau < 0.5 ? ease(tau / 0.5) : tau < 0.7 ? 1 : 1 - ease((tau - 0.7) / 0.3);
-    const front = grow * F.maxDist; // how far from the root the plant has grown
-    const segs = walkPlant(plant, 0.012 * Math.sin(T));
-
+  function buildLSystem(T, cols, rows, u0, v0, du) {
+    const key = `${T.toFixed(5)}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
+    if (P.lsysKey === key) return;
+    const forest = plantForest();
+    const zoom = P.f; // Scale zooms in on the forest around the frame's centre
     const hist = new Float32Array(cols * rows);
     const stamp = (cxv, cyv, r, w) => {
       const ix = Math.round(cxv), iy = Math.round(cyv);
@@ -743,24 +743,35 @@
         if (dx * dx + dy * dy > r * r + 0.25) continue;
         const X = ix + dx, Y = iy + dy;
         if (X < 0 || Y < 0 || X >= cols || Y >= rows) continue;
-        const k = Y * cols + X;
-        if (w > hist[k]) hist[k] = w;
+        const c = Y * cols + X;
+        if (w > hist[c]) hist[c] = w;
       }
     };
-    const toCol = (x) => ((x - F.cx) * fit - u0) / du;
-    const toRow = (y) => ((y - F.cy) * fit - v0) / du;
-    for (let k = 0; k < segs.length; k += 6) {
-      const d0 = segs[k + 5];
-      if (d0 >= front) continue;
-      const part = Math.min(1, front - d0); // the segment at the growth front draws partway
-      const depth = segs[k + 4] / Math.max(1, F.maxDepth);
-      // Trunk and main limbs thicker and brighter; the growing tip glows.
-      const r = Math.max(0, (1 - depth) ** 2 * 1.6);
-      const w = front - d0 < 3 && grow < 1 ? 1 : 0.55 + 0.45 * (1 - depth);
-      const ax = toCol(segs[k]), ay = toRow(segs[k + 1]);
-      const bx = toCol(segs[k] + (segs[k + 2] - segs[k]) * part), by = toRow(segs[k + 1] + (segs[k + 3] - segs[k + 1]) * part);
-      const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) * 1.5));
-      for (let i = 0; i <= n; i++) stamp(ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n, r, w);
+    const ease = (q) => q * q * (3 - 2 * q);
+    for (const t of forest.trees) {
+      // Loop timing, shifted so T = 0 is the grown forest: hold, retract, pause, regrow, hold.
+      const tau = (((T / TAU + 0.55 - t.delay) % 1) + 1) % 1;
+      const grow = tau < 0.5 ? ease(tau / 0.5) : tau < 0.7 ? 1 : 1 - ease((tau - 0.7) / 0.3);
+      const front = t.startDist + grow * (t.maxDist - t.startDist);
+      const segs = walkPlant(t.plant, 0.012 * Math.sin(T + t.phase));
+      const toCol = (x) => ((t.u + x * t.k) * zoom - u0) / du;
+      const toRow = (y) => ((forest.rootV + y * t.k) * zoom - v0) / du;
+      const layer = 0.6 + 0.4 * t.size; // back plants dimmer
+      const thick = 1.7 * t.size * zoom;
+      for (let k = 0; k < segs.length; k += 6) {
+        const d0 = segs[k + 5];
+        if (d0 >= front) continue;
+        const part = Math.min(1, front - d0); // the segment at the growth front draws partway
+        const depth = segs[k + 4] / Math.max(1, t.maxDepth);
+        const r = Math.max(0, (1 - depth) ** 2 * thick);
+        // Limbs brighter than twigs; the growing tip glows.
+        const w = (front - d0 < 3 && grow < 1 ? 1 : 0.55 + 0.45 * (1 - depth)) * layer;
+        const ax = toCol(segs[k]), ay = toRow(segs[k + 1]);
+        const bx = toCol(segs[k] + (segs[k + 2] - segs[k]) * part), by = toRow(segs[k + 1] + (segs[k + 3] - segs[k + 1]) * part);
+        if ((ay < -2 && by < -2) || (ay > rows + 2 && by > rows + 2)) continue; // off the canvas
+        const nPts = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) * 1.5));
+        for (let i = 0; i <= nPts; i++) stamp(ax + ((bx - ax) * i) / nPts, ay + ((by - ay) * i) / nPts, r, w);
+      }
     }
     P.lsys = { val: hist, cols, rows, u0, v0, du };
     P.lsysKey = key;
