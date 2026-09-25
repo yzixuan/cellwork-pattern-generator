@@ -416,7 +416,7 @@
       src: Array.from({ length: 8 }, () => [rng(), rng(), rng() * TAU]),
       noise: nz.noise, fbm: nz.fbm, ax: 1, ay: 1, sqKey: "", sqPlaced: [], dropKey: "", drops: [],
       attKey: "", att: null, lorenzKey: "", lorenz: null,
-      cliffKey: "", cliff: null, cliffPickKey: "", cliffPick: null, cliffOrbitKey: "", cliffOrbit: null,
+      cliffKey: "", cliff: null, cliffPickKey: "", cliffPick: null, cliffRefKey: "", cliffRef: 1, cliffOrbitKey: "", cliffOrbit: null,
     };
   }
 
@@ -544,43 +544,54 @@
 
   // Clifford attractor:  x' = sin(a·y) + c·cos(a·x),  y' = sin(b·x) + d·cos(b·y).
   // Iterated a few hundred thousand times; each cell counts how often the orbit lands in it.
-  // In Ambient the four parameters drift round a small circle once per loop, so the fine
-  // filaments slide and twist through the shape and the loop joins seamlessly.
-  const CLIFF_FLOW = 0.12; // how far the parameters drift
-  const cliffordParams = (base, amp, T) => [
-    base[0] + amp * Math.cos(T), base[1] + amp * Math.sin(T),
-    base[2] + amp * 0.5 * Math.sin(T + 1), base[3] + amp * 0.5 * Math.cos(T + 2),
-  ];
+  // In Ambient the four parameters glide along a short straight path and back once per loop
+  // (sin T), so the filaments slide one way, ease to a stop, and retrace their course; the
+  // loop joins seamlessly and only ever visits one short stretch of parameter space.
+  const CLIFF_FLOW = 0.14; // how far the parameters travel from the centre of the path
+  const CLIFF_CHECKS = 16; // points along the path tested for collapse when picking a shape
+  const cliffordParams = (pick, T) => {
+    const s = pick.amp * Math.sin(T);
+    return pick.base.map((v, i) => v + s * pick.dir[i]);
+  };
+  const cliffordOrbit = (p, steps, visit) => {
+    const [a, b, c, d] = p;
+    let x = 0.1, y = 0.1;
+    for (let i = 0; i < steps + 100; i++) {
+      const nx = Math.sin(a * y) + c * Math.cos(a * x);
+      y = Math.sin(b * x) + d * Math.cos(b * y);
+      x = nx;
+      if (i >= 100) visit(x, y); // skip the run-in before the orbit settles
+    }
+  };
 
   // Most random parameters collapse to a few points or a loop. Search seeded candidates and
-  // keep the one whose orbit covers the most of the plane at its worst point in the loop,
-  // so the shape never collapses mid-animation. Also measures its real bounds for framing.
+  // keep the one whose orbit stays most spread out at its worst point along the whole path,
+  // so the shape never collapses mid-animation. Also measures its bounds for framing.
   function pickClifford() {
     const key = `${S.seed}`;
     if (P.cliffPickKey === key) return P.cliffPick;
     const rng = mulberry32(S.seed * 97 + 3);
-    const amp = CLIFF_FLOW;
-    const PHASES = 6, STEPS = 4000, GRID = 64;
+    const GRID = 64;
     let best = null, bestScore = -1;
     for (let tries = 0; tries < 150 && bestScore < 900; tries++) {
       const base = [rng() * 4 - 2, rng() * 4 - 2, rng() * 3 - 1.5, rng() * 3 - 1.5];
+      const raw = [rng() - 0.5, rng() - 0.5, (rng() - 0.5) * 0.5, (rng() - 0.5) * 0.5];
+      const len = Math.hypot(...raw) || 1;
+      const cand = { base, dir: raw.map((v) => v / len), amp: CLIFF_FLOW };
       let minCov = Infinity, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-      for (let ph = 0; ph < PHASES && minCov > bestScore; ph++) {
-        const [a, b, c, d] = cliffordParams(base, amp, (ph / PHASES) * TAU);
+      for (let k = 0; k < CLIFF_CHECKS && minCov > bestScore; k++) {
+        // Points spread from one end of the path to the other (T = -π/2 … π/2).
+        const T = -Math.PI / 2 + (Math.PI * k) / (CLIFF_CHECKS - 1);
         const seen = new Uint8Array(GRID * GRID);
-        let x = 0.1, y = 0.1, cov = 0;
-        for (let i = 0; i < STEPS; i++) {
-          const nx = Math.sin(a * y) + c * Math.cos(a * x);
-          y = Math.sin(b * x) + d * Math.cos(b * y);
-          x = nx;
-          if (i < 50) continue;
+        let cov = 0;
+        cliffordOrbit(cliffordParams(cand, T), 4000, (x, y) => {
           if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
-          const k = Math.floor(((y + 2.5) / 5) * GRID) * GRID + Math.floor(((x + 2.5) / 5) * GRID);
-          if (!seen[k]) { seen[k] = 1; cov++; }
-        }
+          const c = Math.floor(((y + 2.5) / 5) * GRID) * GRID + Math.floor(((x + 2.5) / 5) * GRID);
+          if (!seen[c]) { seen[c] = 1; cov++; }
+        });
         minCov = Math.min(minCov, cov);
       }
-      if (minCov > bestScore) { bestScore = minCov; best = { base, amp, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, sx: x1 - x0, sy: y1 - y0 }; }
+      if (minCov > bestScore) { bestScore = minCov; best = { ...cand, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, sx: x1 - x0, sy: y1 - y0 }; }
     }
     P.cliffPick = best;
     P.cliffPickKey = key;
@@ -591,24 +602,29 @@
     const key = `${T.toFixed(5)}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
     if (P.cliffKey === key) return;
     const pick = pickClifford();
-    const [a, b, c, d] = cliffordParams(pick.base, pick.amp, T);
-    // Fit the bounds measured across the whole drift inside the frame, then apply Scale.
-    const fit = Math.min((2 * P.ax) / pick.sx, (2 * P.ay) / pick.sy) * 0.88 * P.f;
-    const hist = new Float32Array(cols * rows);
+    const fit = Math.min((2 * P.ax) / pick.sx, (2 * P.ay) / pick.sy) * 0.88 * P.f; // Scale zooms
     const N = 60000 + P.cx * 60000;
-    let x = 0.1, y = 0.1;
-    for (let i = 0; i < N + 100; i++) {
-      const nx = Math.sin(a * y) + c * Math.cos(a * x);
-      y = Math.sin(b * x) + d * Math.cos(b * y);
-      x = nx;
-      if (i < 100) continue; // skip the run-in before the orbit settles
+    const binInto = (hist, p) => cliffordOrbit(p, N, (x, y) => {
       const ix = Math.round(((x - pick.cx) * fit - u0) / du), iy = Math.round(((y - pick.cy) * fit - v0) / du);
       if (ix >= 0 && iy >= 0 && ix < cols && iy < rows) hist[iy * cols + ix]++;
+    });
+    // One brightness reference for the whole loop (the busiest cell at the middle and both ends
+    // of the path), instead of each frame's own busiest cell, so frames don't flash.
+    const refKey = `${S.seed}:${N}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}:${fit.toFixed(5)}`;
+    if (P.cliffRefKey !== refKey) {
+      let max = 0;
+      for (const t of [0, Math.PI / 2, -Math.PI / 2]) {
+        const h = new Float32Array(cols * rows);
+        binInto(h, cliffordParams(pick, t));
+        for (let i = 0; i < h.length; i++) if (h[i] > max) max = h[i];
+      }
+      P.cliffRef = Math.log1p(max);
+      P.cliffRefKey = refKey;
     }
+    const hist = new Float32Array(cols * rows);
+    binInto(hist, cliffordParams(pick, T));
     // Log scale so faint filaments still show next to dense cores.
-    let max = 0;
-    for (let i = 0; i < hist.length; i++) { hist[i] = Math.log1p(hist[i]); if (hist[i] > max) max = hist[i]; }
-    if (max > 0) for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(hist[i] / max, 0.85);
+    for (let i = 0; i < hist.length; i++) hist[i] = Math.pow(Math.min(1, Math.log1p(hist[i]) / P.cliffRef), 0.85);
     P.cliff = { val: hist, cols, rows, u0, v0, du };
     P.cliffKey = key;
   }
