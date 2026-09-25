@@ -34,3 +34,7 @@ python3 -m http.server 8000
 ```
 
 Then open http://localhost:8000.
+
+## Brand
+
+The mark is a 3 × 3 value ramp: dots that grow corner to corner, the tool's value-to-size idea in miniature. Files are in [`brand/`](brand): `cellwork-mark.svg` (lavender), `cellwork-mark-light.svg`, `cellwork-mark-dark.svg` and `favicon.svg`.
