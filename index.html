@@ -405,6 +405,16 @@
         return A.val[iy * A.cols + ix];
       },
     },
+    lsystem: {
+      name: "L-Systems",
+      spacing: 6, // thin branches need fine cells
+      fn(u, v, T, P) {
+        const A = P.lsys;
+        const ix = Math.round((u - A.u0) / A.du), iy = Math.round((v - A.v0) / A.du);
+        if (ix < 0 || iy < 0 || ix >= A.cols || iy >= A.rows) return 0;
+        return A.val[iy * A.cols + ix];
+      },
+    },
   };
 
   let P = null;
@@ -417,7 +427,7 @@
       src: Array.from({ length: 8 }, () => [rng(), rng(), rng() * TAU]),
       noise: nz.noise, fbm: nz.fbm, ax: 1, ay: 1, sqKey: "", sqPlaced: [], dropKey: "", drops: [],
       attKey: "", att: null, lorenzKey: "", lorenz: null,
-      cliffKey: "", cliff: null, cliffPickKey: "", cliffPick: null, cliffRefKey: "", cliffRef: 1, cliffOrbitKey: "", cliffOrbit: null,
+      cliffKey: "", cliff: null, cliffPickKey: "", cliffPick: null, cliffRefKey: "", cliffRef: 1, lsysKey: "", lsys: null, lsysPlantKey: "", lsysPlant: null, cliffOrbitKey: "", cliffOrbit: null,
     };
   }
 
@@ -630,6 +640,123 @@
     P.cliffKey = key;
   }
 
+  // L-systems: a string of symbols is rewritten by plant rules a few times, then read by a
+  // "turtle": F = step forward and draw, + / − = turn, [ ] = save / return to a branch point.
+  // Each seed picks a rule set and random variants (a stochastic L-system). The loop grows
+  // the plant outward from the root, holds, then retracts in reverse, while a gentle wind
+  // sways it; the first frame is the fully grown plant.
+  const LSYS_PLANTS = [
+    { axiom: "X", angle: 25, rules: { X: ["F+[[X]-X]-F[-FX]+X", "F-[[X]+X]+F[+FX]-X", "F+[[X]-X]-F[-FX]+X"], F: ["FF"] }, depth: [3, 4, 5, 5, 6, 6] },
+    { axiom: "F", angle: 22.5, rules: { F: ["FF+[+F-F-F]-[-F+F+F]", "FF-[-F+F+F]+[+F-F-F]"] }, depth: [2, 3, 3, 4, 4, 4] },
+    { axiom: "F", angle: 25.7, rules: { F: ["F[+F]F[-F]F", "F[+F]F", "F[-F]F"] }, depth: [3, 3, 4, 4, 5, 5] },
+    { axiom: "X", angle: 22, rules: { X: ["F[+X][-X]FX", "F[-X]FX", "F[+X]FX", "F[+X][-X]X"], F: ["FF"] }, depth: [4, 5, 5, 6, 6, 7] },
+  ];
+  const LSYS_MAX = 250000; // cap on the rewritten string so high Detail stays fast
+
+  // Rewrite the string and precompute everything that doesn't change frame to frame.
+  function growPlant() {
+    const key = `${S.seed}:${P.cx}:${P.dist}`;
+    if (P.lsysPlantKey === key) return P.lsysPlant;
+    const rng = mulberry32(S.seed * 131 + 7);
+    const plant = LSYS_PLANTS[S.seed % LSYS_PLANTS.length];
+    let str = plant.axiom;
+    for (let g = 0; g < plant.depth[Math.min(5, P.cx - 1)]; g++) {
+      let next = "";
+      for (const ch of str) {
+        const opts = plant.rules[ch];
+        next += opts ? opts[Math.floor(rng() * opts.length)] : ch;
+        if (next.length > LSYS_MAX) break;
+      }
+      if (next.length > LSYS_MAX) break;
+      str = next;
+    }
+    // Distortion bends each turn by a fixed random amount, so branches look less mechanical.
+    const jitter = new Float32Array(str.length);
+    const j = (P.dist / 100) * 0.5;
+    for (let i = 0; i < str.length; i++) jitter[i] = (rng() - 0.5) * j;
+    P.lsysPlant = { str, angle: (plant.angle * Math.PI) / 180, jitter };
+    P.lsysPlantKey = key;
+    return P.lsysPlant;
+  }
+
+  // Walk the turtle. `sway` bends every forward step a little, more so higher up the plant.
+  // Returns segments as flat arrays plus each one's branch depth and distance from the root.
+  function walkPlant(plant, sway) {
+    const { str, angle, jitter } = plant;
+    const segs = [];
+    const stack = [];
+    let x = 0, y = 0, h = -Math.PI / 2, depth = 0, dist = 0;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === "F") {
+        h += sway * (1 + depth * 0.35);
+        const nx = x + Math.cos(h), ny = y + Math.sin(h);
+        segs.push(x, y, nx, ny, depth, dist);
+        x = nx; y = ny; dist++;
+      } else if (ch === "+") h += angle + jitter[i];
+      else if (ch === "-") h -= angle + jitter[i];
+      else if (ch === "[") { stack.push(x, y, h, depth, dist); depth++; }
+      else if (ch === "]") { dist = stack.pop(); depth = stack.pop(); h = stack.pop(); y = stack.pop(); x = stack.pop(); }
+    }
+    return segs;
+  }
+
+  function buildLSystem(T, cols, rows, u0, v0, du) {
+    const key = `${T.toFixed(5)}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
+    if (P.lsysKey === key) return;
+    const plant = growPlant();
+    // Framing from the still plant: fit its height (plus room for sway) and stand it on the bottom edge.
+    if (!plant.frame) {
+      const segs = walkPlant(plant, 0);
+      let x0 = 0, x1 = 0, y0 = 0, maxDepth = 0, maxDist = 1;
+      for (let k = 0; k < segs.length; k += 6) {
+        x0 = Math.min(x0, segs[k + 2]); x1 = Math.max(x1, segs[k + 2]); y0 = Math.min(y0, segs[k + 3]);
+        maxDepth = Math.max(maxDepth, segs[k + 4]); maxDist = Math.max(maxDist, segs[k + 5] + 1);
+      }
+      plant.frame = { cx: (x0 + x1) / 2, w: (x1 - x0) * 1.12, h: -y0 * 1.06, maxDepth, maxDist };
+    }
+    const F = plant.frame;
+    const fit = Math.min((2 * P.ax) / F.w, (1.9 * P.ay) / F.h) * 0.92 * P.f;
+    const rootV = P.ay * 0.96; // just above the bottom edge
+
+    // Loop timing, shifted so T = 0 is the grown plant: hold, retract, pause, regrow, hold.
+    const tau = (T / TAU + 0.55) % 1;
+    const ease = (q) => q * q * (3 - 2 * q);
+    const grow = tau < 0.5 ? ease(tau / 0.5) : tau < 0.7 ? 1 : 1 - ease((tau - 0.7) / 0.3);
+    const front = grow * F.maxDist; // how far from the root the plant has grown
+    const segs = walkPlant(plant, 0.012 * Math.sin(T));
+
+    const hist = new Float32Array(cols * rows);
+    const stamp = (cxv, cyv, r, w) => {
+      const ix = Math.round(cxv), iy = Math.round(cyv);
+      const R = Math.ceil(r);
+      for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+        if (dx * dx + dy * dy > r * r + 0.25) continue;
+        const X = ix + dx, Y = iy + dy;
+        if (X < 0 || Y < 0 || X >= cols || Y >= rows) continue;
+        const k = Y * cols + X;
+        if (w > hist[k]) hist[k] = w;
+      }
+    };
+    const toCol = (x) => ((x - F.cx) * fit - u0) / du;
+    const toRow = (y) => (y * fit + rootV - v0) / du;
+    for (let k = 0; k < segs.length; k += 6) {
+      const d0 = segs[k + 5];
+      if (d0 >= front) continue;
+      const part = Math.min(1, front - d0); // the segment at the growth front draws partway
+      const depth = segs[k + 4] / Math.max(1, F.maxDepth);
+      // Trunk and main limbs thicker and brighter; the growing tip glows.
+      const r = Math.max(0, (1 - depth) ** 2 * 1.6);
+      const w = front - d0 < 3 && grow < 1 ? 1 : 0.55 + 0.45 * (1 - depth);
+      const ax = toCol(segs[k]), ay = toRow(segs[k + 1]);
+      const bx = toCol(segs[k] + (segs[k + 2] - segs[k]) * part), by = toRow(segs[k + 1] + (segs[k + 3] - segs[k + 1]) * part);
+      const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) * 1.5));
+      for (let i = 0; i <= n; i++) stamp(ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n, r, w);
+    }
+    P.lsys = { val: hist, cols, rows, u0, v0, du };
+    P.lsysKey = key;
+  }
+
   // Rain: landing spots spread over the frame (best of 4 random tries each, so drops
   // don't clump), each drop with its own timing and 1-3 falls per loop.
   function placeDrops() {
@@ -688,6 +815,7 @@
     const T = TAU * ((time / S.loop) % 1);
     if (S.generator === "attractor") buildAttractor(T, cols, rows, (ox - W / 2) / half, (oy - H / 2) / half, cell / half);
     if (S.generator === "clifford") buildClifford(T, cols, rows, (ox - W / 2) / half, (oy - H / 2) / half, cell / half);
+    if (S.generator === "lsystem") buildLSystem(T, cols, rows, (ox - W / 2) / half, (oy - H / 2) / half, cell / half);
     const gen = GENS[S.generator].fn;
     const n = S.shades, th = S.threshold / 100, tex = S.texture / 100;
     const sized = S.mapping !== "colour" && S.shape !== "glyph";

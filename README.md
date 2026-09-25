@@ -4,7 +4,7 @@ A generative pattern generator for publishing assets. Pick a pattern, tune it, a
 
 ## Features
 
-- **Seven generators:** Waves, Ripples, Noise Field, Spiral, Stripes, Rain Drops and Clifford Attractor, each with seed, scale, detail and distortion.
+- **Eight generators:** Waves, Ripples, Noise Field, Spiral, Stripes, Rain Drops, Clifford Attractor and L-Systems, each with seed, scale, detail and distortion.
 - **Cell styles:** dots, squares, bars, crosses or glyphs, with spacing, size, shades, threshold and texture.
 - **Motion:** Off, or On for a seamless 2–12 s loop.
 - **Appearance:** dark or light tone, colour swatches or a custom colour, opacity and film grain.
