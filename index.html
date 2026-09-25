@@ -993,12 +993,9 @@
     row(textGroup, "Size", slider("textSize", 24, 160, 2, "px"), "c-textSize"),
   ];
 
-  // Canvas
-  g = group("Canvas");
-  row(g, "Format", select("format", Object.entries(FORMATS).map(([k, v]) => [k, v.label])), "c-format");
-
   // Export
   g = group("Export");
+  row(g, "Format", select("format", Object.entries(FORMATS).map(([k, v]) => [k, v.label])), "c-format");
   const nameInput = h("input", { id: "c-filename", class: "field", type: "text", spellcheck: "false", oninput: (e) => { S.filename = e.target.value; persist(); } });
   row(g, "File name", nameInput, "c-filename");
   const FILE_TYPES = {
