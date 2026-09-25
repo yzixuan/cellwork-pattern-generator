@@ -772,13 +772,15 @@
     };
     const ease = (q) => q * q * (3 - 2 * q);
     for (const t of forest.trees) {
-      // Each forest's cycle: grow for 1/N of the loop, fade away over 0.6/N, then gone until its
-      // next turn. Forests start 1/N apart, and T = 0 lands on the first one fully grown.
-      const G = 1 / LSYS_FORESTS, Fd = 0.6 / LSYS_FORESTS;
-      const tau = (((T / TAU + G - t.gen / LSYS_FORESTS - t.delay) % 1) + 1) % 1;
-      if (tau >= G + Fd) continue;
-      const grow = tau < G ? ease(tau / G) : 1;
-      const fade = tau < G ? 1 : 1 - ease((tau - G) / Fd);
+      // Forests start 1/N of the loop apart (G). Each one grows over 1.25 G (quick start, easing
+      // out), holds to 1.4 G, then fades out by 1.95 G. So the next forest is already growing
+      // while this one is still full, and is about halfway up as this one fades behind it.
+      // T = 0 lands on the first forest mid-hold, fully grown.
+      const G = 1 / LSYS_FORESTS, GROW = 1.25 * G, HOLD = 1.4 * G, GONE = 1.95 * G;
+      const tau = (((T / TAU + 1.32 * G - t.gen * G - t.delay) % 1) + 1) % 1;
+      if (tau >= GONE) continue;
+      const grow = tau < GROW ? 1 - (1 - tau / GROW) ** 2 : 1;
+      const fade = tau < HOLD ? 1 : 1 - ease((tau - HOLD) / (GONE - HOLD));
       const front = t.startDist + grow * (t.maxDist - t.startDist);
       // About 4–5° of lean at the tips, however long the plant: the bend is shared across its steps.
       const segs = walkPlant(t.plant, (0.08 * Math.sin(T + t.phase)) / t.maxDist);
