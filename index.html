@@ -675,7 +675,8 @@
     return { str, angle: (plant.angle * Math.PI) / 180, jitter };
   }
 
-  // Walk the turtle. `sway` bends every forward step a little, more so higher up the plant.
+  // Walk the turtle. `sway` bends every forward step a little (slightly more on higher branches);
+  // callers divide it by the plant's length so the total lean at the tips stays gentle.
   // Returns segments as flat arrays plus each one's branch depth and distance from the root.
   function walkPlant(plant, sway) {
     const { str, angle, jitter } = plant;
@@ -685,7 +686,7 @@
     for (let i = 0; i < str.length; i++) {
       const ch = str[i];
       if (ch === "F") {
-        h += sway * (1 + depth * 0.35);
+        h += sway * (1 + depth * 0.15);
         const nx = x + Math.cos(h), ny = y + Math.sin(h);
         segs.push(x, y, nx, ny, depth, dist);
         x = nx; y = ny; dist++;
@@ -777,7 +778,8 @@
       const grow = tau < 0.5 ? ease(tau / 0.5) : 1;
       const fade = tau < 0.5 ? 1 : 1 - ease((tau - 0.5) / 0.3);
       const front = t.startDist + grow * (t.maxDist - t.startDist);
-      const segs = walkPlant(t.plant, 0.012 * Math.sin(T + t.phase));
+      // About 4–5° of lean at the tips, however long the plant: the bend is shared across its steps.
+      const segs = walkPlant(t.plant, (0.08 * Math.sin(T + t.phase)) / t.maxDist);
       const layer = (0.6 + 0.4 * t.size) * fade; // back plants dimmer
       const thick = 1.7 * t.size * zoom;
       const toCol = (x, y) => ((t.ox + (x * t.cr - y * t.sr) * t.k) * zoom - u0) / du;
