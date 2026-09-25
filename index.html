@@ -53,9 +53,8 @@
   .btn.randomize { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 36px; }
   .btn.randomize svg { width: 14px; height: 14px; color: var(--muted); }
   /* Logo mark: a 3 × 3 value ramp. On hover a wave rolls through the dots, corner to corner. */
-  .brand-id { display: flex; align-items: stretch; gap: 12px; min-width: 0; }
-  /* The mark stretches to the height of the name + description and stays square. */
-  .mark { flex: none; align-self: stretch; height: auto; width: auto; aspect-ratio: 1 / 1; color: var(--accent); }
+  .brand-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .mark { flex: none; width: 40px; height: 40px; color: var(--accent); }
   .mark .d { transform-box: fill-box; transform-origin: center; }
   .brand-id:hover .mark .d { animation: mark-wave 1.1s ease-in-out infinite; animation-delay: calc(var(--i) * 110ms); }
   @keyframes mark-wave { 50% { transform: scale(1.3); } }
