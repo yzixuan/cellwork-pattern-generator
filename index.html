@@ -395,6 +395,7 @@
     },
     clifford: {
       name: "Clifford Attractor",
+      minScale: 180, // at lower zoom the filaments are too fine to read
       noDistortion: true,
       spacing: 6, // fine cells show the speckle and filaments
       fn(u, v, T, P) {
@@ -1055,8 +1056,17 @@
   function set(key, value) {
     const prevAuto = autoName();
     if (key === "generator" && S.spacing === prefSpacing(S.generator)) { S.spacing = prefSpacing(value); binders.spacing?.(); }
+    if (key === "generator") {
+      // A pattern with a minimum scale raises Scale on the way in; leaving it restores the
+      // earlier Scale unless it was changed meanwhile.
+      if (S.scaleBump && S.scale === S.scaleBump.to) S.scale = S.scaleBump.from;
+      S.scaleBump = null;
+      const min = GENS[value].minScale;
+      if (min && S.scale < min) { S.scaleBump = { from: S.scale, to: min }; S.scale = min; }
+      binders.scale?.();
+    }
     S[key] = value;
-    if (P_KEYS.has(key)) buildP();
+    if (P_KEYS.has(key) || key === "generator") buildP();
     if (COLOUR_KEYS.has(key)) buildColours();
     if (key === "format") fitView();
     if (key === "fileType") { S.fileTypeChosen = true; S.stillAuto = false; }
@@ -1112,7 +1122,8 @@
     const pref = GENS[S.generator].spacing;
     Object.assign(S, {
       seed: Math.floor(r() * 9999) + 1,
-      scale: 60 + Math.round(r() * 36) * 5,
+      // Patterns with a minimum scale (Clifford) pick from there up to 300%.
+      scale: GENS[S.generator].minScale ? GENS[S.generator].minScale + Math.round(r() * ((300 - GENS[S.generator].minScale) / 5)) * 5 : 60 + Math.round(r() * 36) * 5,
       complexity: 1 + Math.floor(r() * 6),
       distortion: Math.round(r() * 100),
       color: SWATCHES[Math.floor(r() * SWATCHES.length)][0],
