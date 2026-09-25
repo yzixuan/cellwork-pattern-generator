@@ -208,6 +208,7 @@
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) S.mode = "off";
   try { Object.assign(S, JSON.parse(localStorage.getItem("cellwork-v1") || "{}")); } catch (e) {}
   if (!["png", "svg", "mp4", "gif", "html"].includes(S.fileType)) S.fileType = "png";
+  S.filename = ""; // the File name field is hidden, so always use the automatic name
   // File type follows Animation until someone picks one: Video when it's on, PNG when it's off.
   if (!S.fileTypeChosen) S.fileType = S.mode === "off" ? "png" : "mp4";
   if (S.mode === "off" && (S.fileType === "mp4" || S.fileType === "gif")) {
@@ -997,7 +998,9 @@
   g = group("Export");
   row(g, "Format", select("format", Object.entries(FORMATS).map(([k, v]) => [k, v.label])), "c-format");
   const nameInput = h("input", { id: "c-filename", class: "field", type: "text", spellcheck: "false", oninput: (e) => { S.filename = e.target.value; persist(); } });
-  row(g, "File name", nameInput, "c-filename");
+  // File name is hidden for now: downloads use the automatic name (pattern + seed, e.g. waves-310).
+  const nameRow = row(g, "File name", nameInput, "c-filename");
+  nameRow.hidden = true;
   const FILE_TYPES = {
     png: { label: "PNG", run: () => exportPNG(), motion: false },
     svg: { label: "SVG", run: () => exportSVG(), motion: false },
