@@ -705,19 +705,28 @@
     const key = `${T.toFixed(5)}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
     if (P.lsysKey === key) return;
     const plant = growPlant();
-    // Framing from the still plant: fit its height (plus room for sway) and stand it on the bottom edge.
+    // Framing: fit the crown (the top 60% of the plant) to the canvas, sized by how wide the
+    // crown spreads; the lower 40%, trunk included, runs off the bottom edge.
     if (!plant.frame) {
       const segs = walkPlant(plant, 0);
-      let x0 = 0, x1 = 0, y0 = 0, maxDepth = 0, maxDist = 1;
+      let top = 0, maxDepth = 0, maxDist = 1;
       for (let k = 0; k < segs.length; k += 6) {
-        x0 = Math.min(x0, segs[k + 2]); x1 = Math.max(x1, segs[k + 2]); y0 = Math.min(y0, segs[k + 3]);
+        top = Math.min(top, segs[k + 3]);
         maxDepth = Math.max(maxDepth, segs[k + 4]); maxDist = Math.max(maxDist, segs[k + 5] + 1);
       }
-      plant.frame = { cx: (x0 + x1) / 2, w: (x1 - x0) * 1.12, h: -y0 * 1.06, maxDepth, maxDist };
+      const bottom = top * 0.4; // y grows downward from the root at 0; top is negative
+      let x0 = Infinity, x1 = -Infinity;
+      for (let k = 0; k < segs.length; k += 6) {
+        for (const j of [0, 2]) {
+          const x = segs[k + j], y = segs[k + j + 1];
+          if (y <= bottom) { if (x < x0) x0 = x; if (x > x1) x1 = x; }
+        }
+      }
+      if (!isFinite(x0)) { x0 = -1; x1 = 1; }
+      plant.frame = { cx: (x0 + x1) / 2, cy: (top + bottom) / 2, w: (x1 - x0) * 1.06, h: (bottom - top) * 1.04, maxDepth, maxDist };
     }
     const F = plant.frame;
-    const fit = Math.min((2 * P.ax) / F.w, (1.9 * P.ay) / F.h) * 0.92 * P.f;
-    const rootV = P.ay * 0.96; // just above the bottom edge
+    const fit = Math.min((2 * P.ax) / F.w, (2 * P.ay) / F.h) * P.f;
 
     // Loop timing, shifted so T = 0 is the grown plant: hold, retract, pause, regrow, hold.
     const tau = (T / TAU + 0.55) % 1;
@@ -739,7 +748,7 @@
       }
     };
     const toCol = (x) => ((x - F.cx) * fit - u0) / du;
-    const toRow = (y) => (y * fit + rootV - v0) / du;
+    const toRow = (y) => ((y - F.cy) * fit - v0) / du;
     for (let k = 0; k < segs.length; k += 6) {
       const d0 = segs[k + 5];
       if (d0 >= front) continue;
