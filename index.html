@@ -642,11 +642,11 @@
 
   // L-systems: a string of symbols is rewritten by plant rules a few times, then read by a
   // "turtle": F = step forward and draw, + / − = turn, [ ] = save / return to a branch point.
-  // The canvas shows a forest: a row of plants, each its own seeded specimen of one of four rule
-  // sets. Taller plants stand in front, shorter ones further back and dimmer. Only the crowns
-  // are in frame; trunks run off the bottom edge. The loop starts on the grown forest, retracts
-  // it, regrows it in a staggered wave (each plant from its first visible branch, so there is no
-  // off-screen wait), and holds, while a gentle wind sways each plant slightly out of step.
+  // The canvas shows plants rooted just outside every edge (from below, hanging from above,
+  // reaching in from the sides), each a seeded specimen of one of four rule sets, so only
+  // their crowns are in frame. Two forests take turns: one grows in from its first visible
+  // branch while the other fades away, then they swap, so nothing ever "ungrows" and the
+  // loop starts and ends on the first forest fully grown. A gentle wind sways every plant.
   const LSYS_PLANTS = [
     { axiom: "X", angle: 25, rules: { X: ["F+[[X]-X]-F[-FX]+X", "F-[[X]+X]+F[+FX]-X", "F+[[X]-X]-F[-FX]+X"], F: ["FF"] }, depth: [3, 4, 5, 5, 6, 6] },
     { axiom: "F", angle: 22.5, rules: { F: ["FF+[+F-F-F]-[-F+F+F]", "FF-[-F+F+F]+[+F-F-F]"] }, depth: [2, 3, 3, 4, 4, 4] },
@@ -697,35 +697,56 @@
     return segs;
   }
 
-  // Plant the forest: strings, placement, size and timing per plant. Depends on the frame's
-  // shape, since wider formats get more plants.
+  // Plant both forests: strings, anchor edge, direction, size and timing per plant. Depends on
+  // the frame's shape, since wider formats get more plants.
   function plantForest() {
     const key = `${S.seed}:${P.cx}:${P.dist}:${P.ax.toFixed(3)}:${P.ay.toFixed(3)}`;
     if (P.lsysPlantKey === key) return P.lsysPlant;
-    const rng = mulberry32(S.seed * 131 + 7);
-    const n = Math.max(3, Math.min(9, Math.round(P.ax * 2.4 + 0.5)));
-    // The tallest plant's top 60% fills the frame height; its root sits below the bottom edge.
-    const Hmax = (2 * P.ay * 0.96) / 0.6, rootV = -P.ay * 0.96 + Hmax;
+    const ax = P.ax, ay = P.ay;
+    const n = Math.max(3, Math.min(9, Math.round(ax * 2.4 + 0.5)));
     const trees = [];
-    for (let i = 0; i < n; i++) {
-      const plant = growPlant(rng, Math.floor(rng() * LSYS_PLANTS.length), LSYS_MAX / n);
-      const segs = walkPlant(plant, 0);
-      let top = 0, maxDepth = 0, maxDist = 1;
-      for (let k = 0; k < segs.length; k += 6) {
-        top = Math.min(top, segs[k + 3]);
-        maxDepth = Math.max(maxDepth, segs[k + 4]); maxDist = Math.max(maxDist, segs[k + 5] + 1);
+    for (let gen = 0; gen < 2; gen++) {
+      const rng = mulberry32(S.seed * 131 + 7 + gen * 7919);
+      for (let i = 0; i < n; i++) {
+        const plant = growPlant(rng, Math.floor(rng() * LSYS_PLANTS.length), LSYS_MAX / (2 * n));
+        const segs = walkPlant(plant, 0);
+        let top = 0, maxDepth = 0, maxDist = 1;
+        for (let k = 0; k < segs.length; k += 6) {
+          top = Math.min(top, segs[k + 3]);
+          maxDepth = Math.max(maxDepth, segs[k + 4]); maxDist = Math.max(maxDist, segs[k + 5] + 1);
+        }
+        // About half the plants grow up from below; the rest hang from above or reach in from a side.
+        const edge = i < Math.ceil(n / 2) ? "bottom" : ["top", "left", "right"][Math.floor(rng() * 3)];
+        const along = (i + 0.5) / n + (rng() - 0.5) * (0.8 / n); // position along the edge, 0..1
+        let rootU, rootV, dir;
+        if (edge === "bottom") { rootU = (along * 2 - 1) * ax; rootV = ay; dir = -Math.PI / 2; }
+        else if (edge === "top") { rootU = (1 - along) * 2 * ax - ax; rootV = -ay; dir = Math.PI / 2; }
+        else if (edge === "left") { rootU = -ax; rootV = (rng() * 1.6 - 0.8) * ay; dir = 0; }
+        else { rootU = ax; rootV = (rng() * 1.6 - 0.8) * ay; dir = Math.PI; }
+        // Lean each plant toward the middle of the frame a little.
+        const toMid = Math.atan2(-rootV, -rootU);
+        let lean = toMid - dir; lean = Math.atan2(Math.sin(lean), Math.cos(lean));
+        dir += Math.max(-0.45, Math.min(0.45, lean * 0.5)) + (rng() - 0.5) * 0.2;
+        const size = 0.62 + 0.38 * rng();                       // 1 = biggest, drawn in front
+        const len = size * 2 * ay * 1.45;                       // plant length in frame units
+        const k = len / Math.max(1, -top);                      // plant units → frame units
+        const back = len * 0.42;                                // root this far outside the edge
+        const ca = Math.cos(dir), sa = Math.sin(dir);
+        const t = { plant, k, size, maxDepth, maxDist, gen, delay: rng() * 0.08, phase: rng() * TAU,
+          // Plant space has the stem pointing up (−y); rotate it to point along `dir`.
+          ox: rootU - ca * back, oy: rootV - sa * back, cr: Math.cos(dir + Math.PI / 2), sr: Math.sin(dir + Math.PI / 2) };
+        // Growth begins at the first branch that reaches into the frame.
+        let startDist = maxDist;
+        for (let s2 = 0; s2 < segs.length; s2 += 6) {
+          const X = t.ox + (segs[s2 + 2] * t.cr - segs[s2 + 3] * t.sr) * k, Y = t.oy + (segs[s2 + 2] * t.sr + segs[s2 + 3] * t.cr) * k;
+          if (Math.abs(X) < ax && Math.abs(Y) < ay && segs[s2 + 5] < startDist) startDist = segs[s2 + 5];
+        }
+        t.startDist = Math.min(startDist, maxDist - 1);
+        trees.push(t);
       }
-      const size = 0.62 + 0.38 * rng();             // 1 = tallest, in front
-      const k = (size * Hmax) / Math.max(1, -top);  // plant units → frame units
-      const spread = n > 1 ? i / (n - 1) : 0.5;
-      const u = (spread * 2 - 1) * P.ax * 0.86 + (rng() - 0.5) * (P.ax / n) * 0.8;
-      // Growth begins at the first branch that reaches into the frame.
-      let startDist = maxDist;
-      for (let s = 0; s < segs.length; s += 6) if (rootV + segs[s + 3] * k < P.ay && segs[s + 5] < startDist) startDist = segs[s + 5];
-      trees.push({ plant, u, k, size, maxDepth, maxDist, startDist: Math.min(startDist, maxDist - 1), delay: rng() * 0.12, phase: rng() * TAU });
     }
     trees.sort((a, b) => a.size - b.size); // back to front
-    P.lsysPlant = { trees, rootV };
+    P.lsysPlant = { trees };
     P.lsysPlantKey = key;
     return P.lsysPlant;
   }
@@ -734,7 +755,7 @@
     const key = `${T.toFixed(5)}:${cols}:${rows}:${u0.toFixed(4)}:${v0.toFixed(4)}`;
     if (P.lsysKey === key) return;
     const forest = plantForest();
-    const zoom = P.f; // Scale zooms in on the forest around the frame's centre
+    const zoom = P.f; // Scale zooms in around the frame's centre
     const hist = new Float32Array(cols * rows);
     const stamp = (cxv, cyv, r, w) => {
       const ix = Math.round(cxv), iy = Math.round(cyv);
@@ -749,15 +770,18 @@
     };
     const ease = (q) => q * q * (3 - 2 * q);
     for (const t of forest.trees) {
-      // Loop timing, shifted so T = 0 is the grown forest: hold, retract, pause, regrow, hold.
-      const tau = (((T / TAU + 0.55 - t.delay) % 1) + 1) % 1;
-      const grow = tau < 0.5 ? ease(tau / 0.5) : tau < 0.7 ? 1 : 1 - ease((tau - 0.7) / 0.3);
+      // Each forest's cycle: grow (0–0.5), fade away (0.5–0.8), gone (0.8–1). The second forest
+      // runs half a loop behind, and T = 0 lands on the first forest fully grown.
+      const tau = (((T / TAU + (t.gen === 0 ? 0.5 : 0) - t.delay) % 1) + 1) % 1;
+      if (tau >= 0.8) continue;
+      const grow = tau < 0.5 ? ease(tau / 0.5) : 1;
+      const fade = tau < 0.5 ? 1 : 1 - ease((tau - 0.5) / 0.3);
       const front = t.startDist + grow * (t.maxDist - t.startDist);
       const segs = walkPlant(t.plant, 0.012 * Math.sin(T + t.phase));
-      const toCol = (x) => ((t.u + x * t.k) * zoom - u0) / du;
-      const toRow = (y) => ((forest.rootV + y * t.k) * zoom - v0) / du;
-      const layer = 0.6 + 0.4 * t.size; // back plants dimmer
+      const layer = (0.6 + 0.4 * t.size) * fade; // back plants dimmer
       const thick = 1.7 * t.size * zoom;
+      const toCol = (x, y) => ((t.ox + (x * t.cr - y * t.sr) * t.k) * zoom - u0) / du;
+      const toRow = (x, y) => ((t.oy + (x * t.sr + y * t.cr) * t.k) * zoom - v0) / du;
       for (let k = 0; k < segs.length; k += 6) {
         const d0 = segs[k + 5];
         if (d0 >= front) continue;
@@ -766,9 +790,10 @@
         const r = Math.max(0, (1 - depth) ** 2 * thick);
         // Limbs brighter than twigs; the growing tip glows.
         const w = (front - d0 < 3 && grow < 1 ? 1 : 0.55 + 0.45 * (1 - depth)) * layer;
-        const ax = toCol(segs[k]), ay = toRow(segs[k + 1]);
-        const bx = toCol(segs[k] + (segs[k + 2] - segs[k]) * part), by = toRow(segs[k + 1] + (segs[k + 3] - segs[k + 1]) * part);
-        if ((ay < -2 && by < -2) || (ay > rows + 2 && by > rows + 2)) continue; // off the canvas
+        const x1 = segs[k] + (segs[k + 2] - segs[k]) * part, y1 = segs[k + 1] + (segs[k + 3] - segs[k + 1]) * part;
+        const ax = toCol(segs[k], segs[k + 1]), ay = toRow(segs[k], segs[k + 1]);
+        const bx = toCol(x1, y1), by = toRow(x1, y1);
+        if ((ax < -2 && bx < -2) || (ax > cols + 2 && bx > cols + 2) || (ay < -2 && by < -2) || (ay > rows + 2 && by > rows + 2)) continue;
         const nPts = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) * 1.5));
         for (let i = 0; i <= nPts; i++) stamp(ax + ((bx - ax) * i) / nPts, ay + ((by - ay) * i) / nPts, r, w);
       }
