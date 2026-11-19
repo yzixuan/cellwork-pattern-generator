@@ -19,11 +19,20 @@ A generative pattern generator for publishing assets. Pick a pattern, tune it, a
 | SVG | Print or editing in design tools | Vector; grain isn't included |
 | Video (MP4) | Motion | 1080p, 30 fps, via WebCodecs; falls back to WebM |
 | GIF | Places that don't take video | 720 px, 20 fps; set Grain to 0 for smaller files |
-| Code (HTML) | Live, looping pattern on a website | A ~24 KB self-contained page; **Copy embed code** gives a `<div>` + `<script>` snippet to paste into any site |
+| Code (HTML) | Live, looping pattern on a website | A ~30 KB self-contained page; **Copy embed code** gives a `<div>` + `<script>` snippet to paste into any site |
 
 ## How it works
 
-Everything lives in `index.html`: no build step, no server. Each generator returns a value from 0 to 1 for every cell in a grid; that value sets the cell's size and shade. All motion uses whole cycles of one loop phase, so exported loops repeat seamlessly.
+Plain HTML, CSS and JavaScript: no build step and no dependencies to install.
+
+| File | What's in it |
+| --- | --- |
+| `index.html` | Page markup |
+| `styles.css` | Styles |
+| `engine.js` | The pattern engine: `createCellworkEngine(settings)` draws a frame from a settings object and nothing else. The Code (HTML) export embeds this function as-is, so it must stay self-contained. |
+| `app.js` | The app: settings and saving, controls, preview and exports |
+
+Each generator returns a value from 0 to 1 for every cell in a grid; that value sets the cell's size and shade. All motion uses whole cycles of one loop phase, so exported loops repeat seamlessly.
 
 The GIF encoder ([gifenc](https://github.com/mattdesl/gifenc)) and MP4 muxer ([mp4-muxer](https://github.com/Vanilagy/mp4-muxer)) load from jsDelivr only when you export.
 
