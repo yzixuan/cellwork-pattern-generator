@@ -207,6 +207,7 @@
   // People who ask their system for reduced motion start with Animation off.
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) S.mode = "off";
   try { Object.assign(S, JSON.parse(localStorage.getItem("cellwork-v1") || "{}")); } catch (e) {}
+  if (S.shape === "bar") S.shape = "diamond";
   if (!["png", "svg", "mp4", "gif", "html"].includes(S.fileType)) S.fileType = "png";
   S.filename = ""; // the File name field is hidden, so always use the automatic name
   // File type follows Animation until someone picks one: Video when it's on, PNG when it's off.
@@ -977,7 +978,7 @@
         if (d <= 0.2) continue;
         if (S.shape === "dot") { ctx.moveTo(x + d / 2, y); ctx.arc(x, y, d / 2, 0, TAU); }
         else if (S.shape === "square") ctx.rect(x - d / 2, y - d / 2, d, d);
-        else if (S.shape === "bar") ctx.rect(x - d / 2, y - base / 2, d, base);
+        else if (S.shape === "diamond") { ctx.moveTo(x, y - d / 2); ctx.lineTo(x + d / 2, y); ctx.lineTo(x, y + d / 2); ctx.lineTo(x - d / 2, y); ctx.closePath(); }
         else { const t = Math.max(1, d * 0.28); ctx.rect(x - d / 2, y - t / 2, d, t); ctx.rect(x - t / 2, y - d / 2, t, d); }
       }
       ctx.fill();
@@ -1127,7 +1128,7 @@
   row(g, "Shape", seg("shape", [
     ["dot", "Dot", icon('<circle cx="7" cy="7" r="4.5"/>')],
     ["square", "Square", icon('<rect x="2.5" y="2.5" width="9" height="9" rx=".5"/>')],
-    ["bar", "Bar", icon('<rect x="4.5" y="1.5" width="5" height="11" rx=".5"/>')],
+    ["diamond", "Diamond", icon('<path d="M7 1.5 12.5 7 7 12.5 1.5 7Z"/>')],
     ["cross", "Cross", icon('<rect x="1.5" y="5.6" width="11" height="2.8"/><rect x="5.6" y="1.5" width="2.8" height="11"/>')],
     ["glyph", "Glyph", icon('<text x="7" y="11" text-anchor="middle" font-family="Geist Mono, monospace" font-size="11" font-weight="600">#</text>')],
   ], "Cell shape"));
@@ -1511,7 +1512,7 @@
         if (d <= 0.2) continue;
         if (S.shape === "dot") parts.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(d / 2)}"/>`);
         else if (S.shape === "square") parts.push(`<rect x="${f1(x - d / 2)}" y="${f1(y - d / 2)}" width="${f1(d)}" height="${f1(d)}"/>`);
-        else if (S.shape === "bar") parts.push(`<rect x="${f1(x - d / 2)}" y="${f1(y - base / 2)}" width="${f1(d)}" height="${f1(base)}"/>`);
+        else if (S.shape === "diamond") parts.push(`<path d="M${f1(x)} ${f1(y - d / 2)}L${f1(x + d / 2)} ${f1(y)}L${f1(x)} ${f1(y + d / 2)}L${f1(x - d / 2)} ${f1(y)}Z"/>`);
         else { const t = Math.max(1, d * 0.28); parts.push(`<rect x="${f1(x - d / 2)}" y="${f1(y - t / 2)}" width="${f1(d)}" height="${f1(t)}"/><rect x="${f1(x - t / 2)}" y="${f1(y - d / 2)}" width="${f1(t)}" height="${f1(d)}"/>`); }
       }
       out.push(`<g fill="${RAMP[level]}">${parts.join("")}</g>`);
